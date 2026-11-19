@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "A Nothing-style Dynamic Island for Windows: media, volume, brightness, Wi-Fi, Bluetooth, timer and more.",
   "main": "main.js",
-  "author": "Bizkit Technologies",
+  "author": "Amith / Zevox",
   "license": "MIT",
   "scripts": {
     "start": "electron .",

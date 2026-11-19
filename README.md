@@ -1,5 +1,7 @@
 # Nothing Island — a Dynamic Island for Windows
 
+**Built by Amith / Zevox**
+
 > **Want the lowest RAM?** Use **`lite/`**. It's the same island as a ~150 KB native app with one process and roughly 15–30 MB of RAM, and it doesn't need Node.js. Just double-click `lite/build.bat`.
 
 A black pill that lives at the top-centre of your screen, styled after Nothing OS
