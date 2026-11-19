@@ -50,6 +50,10 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
 
+// The window can be destroyed while timers are still queued (e.g. during Quit): always check first.
+function alive() { return !!(win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()); }
+function send(channel, ...args) { if (alive()) win.webContents.send(channel, ...args); }
+
 // ------------------------------------------------------------------ settings
 // The calendar link is a secret (anyone with it can read your calendar), so it is stored
 // encrypted with Windows DPAPI via safeStorage, never in plain text.
@@ -80,12 +84,12 @@ function saveSettings() {
   try { fs.writeFileSync(settingsFile(), JSON.stringify(out, null, 2), { mode: 0o600 }); } catch {}
 }
 function sendPrefs() {
-  if (win) win.webContents.send('prefs', { autoHide: settings.autoHide });
+  send('prefs', { autoHide: settings.autoHide });
 }
 function setStyle(style) {
   settings.style = style === 'notch' ? 'notch' : 'island';
   saveSettings();
-  if (win) win.webContents.send('style', settings.style);
+  send('style', settings.style);
 }
 
 // ------------------------------------------------------------------ calendar (ICS link)
@@ -144,7 +148,7 @@ async function refreshCalendar() {
       calState = { ...calState, configured: true, ok: false, error: String(e.message || e), updated: Date.now() };
     }
   }
-  if (win) win.webContents.send('calendar', calState);
+  send('calendar', calState);
 }
 
 // ------------------------------------------------------------------ PowerShell bridge
@@ -236,7 +240,7 @@ function wireBridge() {
     try { msg = JSON.parse(line); } catch { return; }
     if (msg.id === 0) {
       bridgeInfo = msg.data;
-      if (win) win.webContents.send('bridge-ready', msg.data);
+      send('bridge-ready', msg.data);
       return;
     }
     const resolve = pending.get(msg.id);
@@ -280,7 +284,7 @@ function callBridge(cmd, arg) {
 
 // ------------------------------------------------------------------ window
 function placeWindow() {
-  if (!win) return;
+  if (!alive()) return;
   const d = screen.getPrimaryDisplay();
   const x = Math.round(d.bounds.x + (d.bounds.width - WIN_W) / 2);
   const y = d.bounds.y;
@@ -325,16 +329,17 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.once('ready-to-show', () => win.showInactive());
   win.webContents.on('did-finish-load', () => {
-    win.webContents.send('style', settings.style);
-    win.webContents.send('calendar', calState);
+    send('style', settings.style);
+    send('calendar', calState);
     sendPrefs();
-    if (bridgeInfo) win.webContents.send('bridge-ready', bridgeInfo);
+    if (bridgeInfo) send('bridge-ready', bridgeInfo);
   });
-  win.on('blur', () => win.webContents.send('blur'));
+  win.on('blur', () => send('blur'));
+  win.on('closed', () => { win = null; });
 }
 
 function applyVisibility() {
-  if (!win) return;
+  if (!alive()) return;
   const show = !userHidden && !(autoHidden && settings.autoHide);
   if (show && !win.isVisible()) {
     win.showInactive();
@@ -369,7 +374,7 @@ function buildTrayMenu() {
     { label: 'Style: Island (floating)', type: 'radio', checked: settings.style === 'island', click: () => setStyle('island') },
     { label: 'Style: Notch (docked)', type: 'radio', checked: settings.style === 'notch', click: () => setStyle('notch') },
     { type: 'separator' },
-    { label: `Expand  (${HOTKEY.replace('CommandOrControl', 'Ctrl')})`, click: () => win && win.webContents.send('toggle') },
+    { label: `Expand  (${HOTKEY.replace('CommandOrControl', 'Ctrl')})`, click: () => send('toggle') },
     {
       label: 'Show island', type: 'checkbox', checked: !userHidden,
       click: (item) => { userHidden = !item.checked; applyVisibility(); },
@@ -421,7 +426,7 @@ const { fileURLToPath } = require('url');
 const RENDERER_PATH = path.normalize(path.join(__dirname, 'renderer', 'index.html')).toLowerCase();
 function trusted(e) {
   const f = e.senderFrame;
-  if (!win || e.sender !== win.webContents || !f || f !== win.webContents.mainFrame) return false;
+  if (!alive() || e.sender !== win.webContents || !f || f !== win.webContents.mainFrame) return false;
   try {
     const u = new URL(f.url);
     return u.protocol === 'file:' && path.normalize(fileURLToPath(u)).toLowerCase() === RENDERER_PATH;
@@ -463,14 +468,14 @@ let hitRect = null;                   // island rect inside the window, from the
 let cursorInside = false;
 let ignoring = true;
 function updateIgnore() {
-  if (!win) return;
+  if (!alive()) return;
   const on = rendererWants || cursorInside;
   if (on === !ignoring) return;
   ignoring = !on;
   win.setIgnoreMouseEvents(ignoring, { forward: true });
 }
-setInterval(() => {
-  if (!win || !win.isVisible() || !hitRect) return;
+const cursorTimer = setInterval(() => {
+  if (quitting || !alive() || !win.isVisible() || !hitRect) return;
   const p = screen.getCursorScreenPoint();
   const b = win.getBounds();
   const pad = 6;
@@ -479,11 +484,11 @@ setInterval(() => {
   if (inside !== cursorInside) {
     cursorInside = inside;
     updateIgnore();
-    win.webContents.send('cursor-inside', inside);
+    send('cursor-inside', inside);
   }
 }, 40);
 onTrusted('interactive', (on, focus) => {
-  if (!win) return;
+  if (!alive()) return;
   rendererWants = !!on;
   updateIgnore();
   if (on && focus) { win.moveTop(); win.focus(); }
@@ -519,13 +524,14 @@ onTrusted('quit', () => app.quit());
 // Pages come back instantly when needed; Task Manager's "Memory" column drops a lot.
 let lastTrim = 0;
 function trimMemory() {
+  if (quitting || !alive()) return;
   if (!settings.lowMemory || !bridge || rendererWants) return;
   if (Date.now() - lastTrim < 45000) return;
   lastTrim = Date.now();
   const pids = app.getAppMetrics().map((m) => m.pid).filter((p) => Number.isInteger(p) && p > 0);
   callBridge('trim', pids);
 }
-setInterval(trimMemory, 60000);
+const trimTimer = setInterval(trimMemory, 60000);
 
 // ------------------------------------------------------------------ lifecycle
 app.whenReady().then(() => {
@@ -539,19 +545,22 @@ app.whenReady().then(() => {
 
   tray = new Tray(trayIcon());
   tray.setToolTip('Nothing Island');
-  tray.on('click', () => win && win.webContents.send('toggle'));
+  tray.on('click', () => send('toggle'));
   tray.on('right-click', () => tray.popUpContextMenu(buildTrayMenu()));
 
-  globalShortcut.register(HOTKEY, () => win && win.webContents.send('toggle'));
+  globalShortcut.register(HOTKEY, () => send('toggle'));
 
   screen.on('display-metrics-changed', placeWindow);
   screen.on('display-added', placeWindow);
   screen.on('display-removed', placeWindow);
 });
 
-app.on('second-instance', () => win && win.webContents.send('toggle'));
+app.on('second-instance', () => send('toggle'));
 app.on('before-quit', () => {
   quitting = true;
+  clearInterval(cursorTimer);
+  clearInterval(trimTimer);
+  clearTimeout(calTimer);
   globalShortcut.unregisterAll();
   if (bridge) bridge.kill();
 });
