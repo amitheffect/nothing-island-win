@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'" />
+  <title>Nothing Island</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- SVG icon sprite -->
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="5.5" width="3.6" height="13" rx="1" fill="currentColor"/><rect x="13.9" y="5.5" width="3.6" height="13" rx="1" fill="currentColor"/></symbol>
+      <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 6.5v11l8-5.5z" fill="currentColor"/><rect x="15.5" y="6.5" width="2.4" height="11" rx="1" fill="currentColor"/></symbol>
+      <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 6.5v11l-8-5.5z" fill="currentColor"/><rect x="6.1" y="6.5" width="2.4" height="11" rx="1" fill="currentColor"/></symbol>
+      <symbol id="i-wifi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 9.5a13 13 0 0 1 18 0"/><path d="M6.2 12.8a8.5 8.5 0 0 1 11.6 0"/><path d="M9.4 16a4 4 0 0 1 5.2 0"/><circle cx="12" cy="19" r="1.1" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-bt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7.5l10 9-5 4.5V3l5 4.5-10 9"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></symbol>
+      <symbol id="i-micoff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M15 10V6.5a3 3 0 0 0-5.6-1.5M9 9v2.5a3 3 0 0 0 4.6 2.5M5.5 11.5a6.5 6.5 0 0 0 10.6 5M18.5 11.5c0 .7-.1 1.3-.3 1.9M12 18v2.5M4 4l16 16"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5.5" y="10.5" width="13" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></symbol>
+      <symbol id="i-snip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-vol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/></symbol>
+      <symbol id="i-volmute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.6" fill="currentColor"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></symbol>
+      <symbol id="i-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/></symbol>
+      <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.5 2.5L5 13.5h6l-1 8 8.5-11h-6z" fill="currentColor"/></symbol>
+      <symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 3v4M15 3v4M6.5 7h11v3.5a5.5 5.5 0 0 1-11 0zM12 16v5"/></symbol>
+      <symbol id="i-cam" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="6.5" width="12.5" height="11" rx="2.5"/><path d="M15.5 10.5l5-3v9l-5-3z"/></symbol>
+      <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="5.5" width="16" height="14.5" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" stroke-linecap="round"/></symbol>
+    </defs>
+  </svg>
+
+  <div id="dock">
+    <span class="ear l"></span><span class="ear r"></span>
+  <div id="island" class="state-idle">
+    <!-- privacy dot: camera (green) / microphone (orange) in use -->
+    <span id="privDot"></span>
+
+    <!-- collapsed pill -->
+    <div id="pill" class="layer">
+      <div class="pill-in" id="pillIn"></div>
+    </div>
+
+    <!-- transient HUD (volume / brightness) -->
+    <div id="hud" class="layer">
+      <svg class="hud-ico"><use id="hudIco" href="#i-vol"/></svg>
+      <div class="hud-bar" id="hudBar"></div>
+      <div class="hud-val" id="hudVal"></div>
+    </div>
+
+    <!-- charger plugged / unplugged -->
+    <div id="charge" class="layer">
+      <svg class="hud-ico"><use id="chgIco" href="#i-bolt"/></svg>
+      <div class="chg-bar" id="chgBar"></div>
+      <div class="hud-val" id="chgVal"></div>
+    </div>
+
+    <!-- notification peek -->
+    <div id="notif" class="layer">
+      <div class="n-ico" id="nIco"></div>
+      <div class="n-body">
+        <div class="label" id="nApp"></div>
+        <div class="n-title" id="nTitle"></div>
+        <div class="n-text" id="nText"></div>
+      </div>
+      <button class="n-act" id="nAct">JOIN</button>
+      <span class="n-dot" id="nDot"></span>
+    </div>
+
+    <!-- timer finished -->
+    <div id="alarm" class="layer">
+      <div id="alarmText"></div>
+      <div class="alarm-sub">TAP TO DISMISS</div>
+    </div>
+
+    <!-- expanded panel -->
+    <div id="panel" class="layer">
+      <div class="grid">
+        <!-- media -->
+        <section class="tile dark media span3" id="mediaTile">
+          <canvas class="art" id="art"></canvas>
+          <div class="media-body">
+            <div class="label" id="mediaApp">MEDIA</div>
+            <div class="m-title" id="mTitle">Nothing playing</div>
+            <div class="m-artist" id="mArtist">Play something to control it here</div>
+            <div class="m-bottom">
+              <div class="progress"><i id="mProg"></i></div>
+              <div class="m-ctrls">
+                <button class="cbtn ghost" data-media="prev" title="Previous"><svg><use href="#i-prev"/></svg></button>
+                <button class="cbtn white" data-media="toggle" title="Play / Pause"><svg><use id="playIco" href="#i-play"/></svg></button>
+                <button class="cbtn ghost" data-media="next" title="Next"><svg><use href="#i-next"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- analog clock -->
+        <section class="tile white clock" title="Clock">
+          <svg viewBox="0 0 100 100" id="clockSvg">
+            <g id="ticks"></g>
+            <line id="hHand" x1="50" y1="50" x2="50" y2="30" stroke="#111" stroke-width="3.6" stroke-linecap="round"/>
+            <line id="mHand" x1="50" y1="50" x2="50" y2="17" stroke="#111" stroke-width="2.6" stroke-linecap="round"/>
+            <line id="sHand" x1="50" y1="56" x2="50" y2="13" stroke="#d71921" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="50" cy="50" r="2.4" fill="#d71921"/>
+          </svg>
+        </section>
+
+        <!-- Wi-Fi / Bluetooth pills -->
+        <button class="tile pill-btn span2" id="wifiBtn" title="Click: toggle · Right-click: settings">
+          <span class="pb-ico"><svg><use href="#i-wifi"/></svg></span>
+          <span class="pb-text"><span class="pb-name">Wi-Fi</span><span class="pb-sub" id="wifiSub">—</span></span>
+        </button>
+        <button class="tile pill-btn span2" id="btBtn" title="Click: toggle · Right-click: settings">
+          <span class="pb-ico"><svg><use href="#i-bt"/></svg></span>
+          <span class="pb-text"><span class="pb-name">Bluetooth</span><span class="pb-sub" id="btSub">—</span></span>
+        </button>
+
+        <!-- sliders -->
+        <div class="tile slider span2" id="volSlider" data-kind="volume">
+          <i class="fill"></i>
+          <button class="sl-ico" id="muteBtn" title="Mute"><svg><use id="volIco" href="#i-vol"/></svg></button>
+          <span class="sl-val" id="volVal"></span>
+        </div>
+        <div class="tile slider span2" id="briSlider" data-kind="brightness">
+          <i class="fill"></i>
+          <span class="sl-ico"><svg><use href="#i-sun"/></svg></span>
+          <span class="sl-val" id="briVal"></span>
+        </div>
+
+        <!-- timer -->
+        <section class="tile white timer span2">
+          <div class="t-top">
+            <span class="label dark-label" id="timerLabel">TIMER</span>
+            <button class="mini" id="timerReset" title="Reset"><svg><use href="#i-reset"/></svg></button>
+          </div>
+          <div class="t-time" id="timerTime"></div>
+          <div class="t-bottom">
+            <div class="chips" id="chips">
+              <button data-min="1">1</button><button data-min="5">5</button><button data-min="10">10</button><button data-min="25">25</button>
+            </div>
+            <button class="t-go" id="timerGo" title="Start / Pause"><svg><use id="goIco" href="#i-play"/></svg></button>
+          </div>
+        </section>
+
+        <!-- small round toggles -->
+        <section class="quad">
+          <button class="circ" id="micBtn" title="Microphone"><svg><use id="micIco" href="#i-mic"/></svg></button>
+          <button class="circ" id="darkBtn" title="Dark mode"><svg><use href="#i-moon"/></svg></button>
+          <button class="circ" id="snipBtn" title="Screenshot"><svg><use href="#i-snip"/></svg></button>
+          <button class="circ" id="lockBtn" title="Lock PC"><svg><use href="#i-lock"/></svg></button>
+        </section>
+
+        <!-- battery -->
+        <section class="tile dark battery" id="batTile">
+          <span class="label" id="batLabel">BATTERY</span>
+          <div class="bat-num" id="batNum"></div>
+          <div class="bat-dots" id="batDots"></div>
+        </section>
+
+        <!-- calendar: today's date + next events -->
+        <section class="tile white cal-date" id="calDate" title="Today">
+          <span class="cd-day" id="cdDay"></span>
+          <div class="cd-num" id="cdNum"></div>
+          <span class="cd-mon" id="cdMon"></span>
+        </section>
+        <section class="tile dark agenda span3" id="agenda">
+          <div class="ag-head">
+            <span class="label" id="agLabel">UP NEXT</span>
+            <span class="week" id="week"></span>
+          </div>
+          <div class="ag-list" id="agList"></div>
+        </section>
+      </div>
+      <!-- island settings (gear) -->
+      <div class="settings" id="settingsView">
+        <div class="set-head">
+          <span class="label">ISLAND SETTINGS</span>
+          <button class="mini dark-mini" id="setClose" title="Back">&#x2715;</button>
+        </div>
+        <div class="set-block">
+          <span class="label">CALENDAR · SECRET ICS LINK</span>
+          <div class="set-row">
+            <input id="calInput" type="text" spellcheck="false" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" />
+            <button class="set-btn" id="calSave">SAVE</button>
+          </div>
+          <div class="set-help">Google Calendar → Settings → your calendar → <b>Secret address in iCal format</b>.<br/>Outlook → Settings → Calendar → Shared calendars → Publish → <b>ICS</b>.</div>
+          <div class="set-status" id="calStatus">Not connected</div>
+        </div>
+        <div class="set-block">
+          <span class="label">GESTURES ON THE PILL</span>
+          <div class="set-gest">
+            <span><b>Swipe ←</b> next track</span><span><b>Swipe →</b> previous</span>
+            <span><b>Hold</b> play / pause</span><span><b>Scroll</b> volume</span>
+            <span><b>Click</b> open panel</span><span><b>Ctrl+Alt+Space</b> toggle</span>
+          </div>
+        </div>
+        <button class="set-block set-toggle" id="autoHideBtn">
+          <span><span class="label">HIDE OVER FULLSCREEN</span><span class="set-help">Games, F11 browsers, fullscreen video. Never over Premiere, After Effects, Photoshop…</span></span>
+          <span class="switch"><i></i></span>
+        </button>
+        <button class="set-btn wide" id="winSettings">OPEN WINDOWS SETTINGS</button>
+      </div>
+
+      <div class="foot">
+        <span class="label" id="dateLabel"></span>
+        <span class="foot-r">
+          <button class="style-btn" id="styleBtn" title="Switch between Notch and Island"><span class="sb-shape"></span><span id="styleName">ISLAND</span></button>
+          <button class="foot-btn" id="settingsBtn" title="Windows settings"><svg><use href="#i-gear"/></svg></button>
+        </span>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <script src="dotmatrix.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

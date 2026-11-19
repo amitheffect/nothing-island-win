@@ -1,0 +1,10 @@
+node_modules/
+dist/
+out/
+*.log
+# Lite build outputs (built on your PC by lite/build.bat)
+lite/NothingIsland.exe
+lite/build.log
+# local settings / secrets
+settings.json
+.env

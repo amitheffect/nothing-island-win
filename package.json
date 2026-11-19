@@ -1,0 +1,26 @@
+{
+  "name": "nothing-island",
+  "productName": "Nothing Island",
+  "version": "1.0.0",
+  "description": "A Nothing-style Dynamic Island for Windows: media, volume, brightness, Wi-Fi, Bluetooth, timer and more.",
+  "main": "main.js",
+  "author": "Bizkit Technologies",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable nsis"
+  },
+  "devDependencies": {
+    "electron": "^39.2.1",
+    "electron-builder": "^26.15.7"
+  },
+  "build": {
+    "appId": "in.bizkit.nothingisland",
+    "productName": "Nothing Island",
+    "asarUnpack": ["bridge.ps1", "bridge.cs"],
+    "files": ["main.js", "calendar.js", "preload.js", "bridge.ps1", "bridge.cs", "renderer/**/*"],
+    "win": {
+      "target": ["portable", "nsis"]
+    }
+  }
+}
