@@ -171,7 +171,7 @@ function expand(ev, from, to) {
 }
 
 /** Parse ICS text and return timed events overlapping [from, to], sorted by start. */
-function eventsBetween(text, from, to) {
+function eventsBetween(text, from, to, opts = {}) {
   const lines = String(text).replace(/\r\n?/g, '\n').replace(/\n[ \t]/g, '').split('\n');
   const raw = [];
   let cur = null, depth = 0;
@@ -194,7 +194,7 @@ function eventsBetween(text, from, to) {
     const ds = get('DTSTART');
     if (!ds) continue;
     const start = parseDate(ds.value, ds.params);
-    if (!start || start.allDay) continue; // the island only counts down to timed events
+    if (!start || (start.allDay && !opts.allDay)) continue; // the countdown only uses timed events
     let end = null;
     const de = get('DTEND');
     if (de) end = parseDate(de.value, de.params);
@@ -221,7 +221,7 @@ function eventsBetween(text, from, to) {
       title: unescapeText((get('SUMMARY') || {}).value) || 'Busy',
       url: findMeetingUrl([(get('URL') || {}).value, (get('LOCATION') || {}).value,
         unescapeText((get('DESCRIPTION') || {}).value), (get('X-GOOGLE-CONFERENCE') || {}).value]),
-      start, dur: Math.max(0, dur),
+      start, dur: Math.max(0, dur), allDay: !!start.allDay,
       rrule: rid ? null : rr ? rr.value : null,
       exdates,
     });
@@ -231,7 +231,7 @@ function eventsBetween(text, from, to) {
   for (const ev of events) {
     ev.overridden = (!ev.isOverride && overrides.get(ev.uid)) || new Set();
     for (const o of expand(ev, from, to)) {
-      out.push({ id: `${ev.uid}@${o.start}`, title: ev.title, start: o.start, end: o.end, url: ev.url });
+      out.push({ id: `${ev.uid}@${o.start}`, title: ev.title, start: o.start, end: o.end, url: ev.url, allDay: ev.allDay });
     }
   }
   out.sort((a, b) => a.start - b.start);

@@ -760,10 +760,23 @@ namespace NI {
         case "snip": { Process p = Process.Start("ms-screenclip:"); if (p != null) p.Dispose(); return null; }
         case "open": {
           string uri = arg as string;
-          if (uri == null || !Regex.IsMatch(uri, "^ms-settings:[a-z0-9-]{0,64}$")) throw new ArgumentException("Blocked URI");
+          if (uri == null || !(Regex.IsMatch(uri, "^ms-settings:[a-z0-9-]{0,64}$") || uri == "ms-settings-connectabledevices:devicediscovery")) throw new ArgumentException("Blocked URI");
           Process p = Process.Start(uri); if (p != null) p.Dispose(); return null;
         }
         case "diag": return Sys.Diag();
+        // ---- pickers (devices.cs)
+        case "wifiList": return NI.Dev.Wifi.List();
+        case "wifiScan": NI.Dev.Wifi.Scan(); return null;
+        case "wifiConnect": {
+          var o = arg as Dictionary<string, object>;
+          if (o == null) throw new ArgumentException("Invalid request");
+          return NI.Dev.Wifi.Connect(o.ContainsKey("ssid") ? o["ssid"] as string : null, o.ContainsKey("password") ? o["password"] as string : null);
+        }
+        case "wifiForget": NI.Dev.Wifi.Forget(arg as string); return null;
+        case "wifiDisconnect": NI.Dev.Wifi.Disconnect(); return null;
+        case "audioOutputs": return NI.Dev.Outputs.List();
+        case "setAudioOutput": NI.Dev.Outputs.Set(arg as string); return null;
+        case "btList": return NI.Dev.Bluetooth.List();
         case "trim": {
           var list = new List<int>();
           var arr = arg as object[];

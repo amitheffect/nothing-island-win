@@ -30,6 +30,20 @@
       <symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 3v4M15 3v4M6.5 7h11v3.5a5.5 5.5 0 0 1-11 0zM12 16v5"/></symbol>
       <symbol id="i-cam" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="6.5" width="12.5" height="11" rx="2.5"/><path d="M15.5 10.5l5-3v9l-5-3z"/></symbol>
       <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="5.5" width="16" height="14.5" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6l-6 6 6 6"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.2 4.2 8.8-9.2"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></symbol>
+      <symbol id="i-padlock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="11" width="12" height="9" rx="2"/><path d="M8.5 11V8.5a3.5 3.5 0 0 1 7 0V11"/></symbol>
+      <symbol id="i-speaker" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="6" y="3.5" width="12" height="17" rx="3"/><circle cx="12" cy="14" r="3"/><circle cx="12" cy="7.5" r="1" fill="currentColor"/></symbol>
+      <symbol id="i-headphones" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 15v-2.5a7.5 7.5 0 0 1 15 0V15"/><rect x="3.5" y="14" width="4" height="6.5" rx="1.8"/><rect x="16.5" y="14" width="4" height="6.5" rx="1.8"/></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="4.5" width="17" height="11.5" rx="2"/><path d="M9 20h6M12 16v4"/></symbol>
+      <symbol id="i-keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="6.5" width="18" height="11" rx="2.5"/><path d="M7 10.5h.01M10.5 10.5h.01M14 10.5h.01M17 10.5h.01M8 14h8"/></symbol>
+      <symbol id="i-mouse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="7" y="3.5" width="10" height="17" rx="5"/><path d="M12 7v3"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/></symbol>
+      <symbol id="i-pad" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7.5 7.5h9a4.5 4.5 0 0 1 4.3 5.8l-1 3.4a2.4 2.4 0 0 1-4 1L14 16h-4l-1.8 1.7a2.4 2.4 0 0 1-4-1l-1-3.4A4.5 4.5 0 0 1 7.5 7.5z"/><path d="M8 10.5v3M6.5 12h3"/></symbol>
+      <symbol id="i-dev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="5" width="14" height="14" rx="3.5"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" stroke-linecap="round"/></symbol>
     </defs>
   </svg>
@@ -110,13 +124,15 @@
         </section>
 
         <!-- Wi-Fi / Bluetooth pills -->
-        <button class="tile pill-btn span2" id="wifiBtn" title="Click: toggle · Right-click: settings">
-          <span class="pb-ico"><svg><use href="#i-wifi"/></svg></span>
+        <button class="tile pill-btn span2" id="wifiBtn" title="Icon: turn on / off · Rest: choose a network">
+          <span class="pb-ico" title="Turn Wi-Fi on / off"><svg><use href="#i-wifi"/></svg></span>
           <span class="pb-text"><span class="pb-name">Wi-Fi</span><span class="pb-sub" id="wifiSub">—</span></span>
+          <svg class="pb-chev"><use href="#i-chev"/></svg>
         </button>
-        <button class="tile pill-btn span2" id="btBtn" title="Click: toggle · Right-click: settings">
-          <span class="pb-ico"><svg><use href="#i-bt"/></svg></span>
+        <button class="tile pill-btn span2" id="btBtn" title="Icon: turn on / off · Rest: devices">
+          <span class="pb-ico" title="Turn Bluetooth on / off"><svg><use href="#i-bt"/></svg></span>
           <span class="pb-text"><span class="pb-name">Bluetooth</span><span class="pb-sub" id="btSub">—</span></span>
+          <svg class="pb-chev"><use href="#i-chev"/></svg>
         </button>
 
         <!-- sliders -->
@@ -124,6 +140,7 @@
           <i class="fill"></i>
           <button class="sl-ico" id="muteBtn" title="Mute"><svg><use id="volIco" href="#i-vol"/></svg></button>
           <span class="sl-val" id="volVal"></span>
+          <button class="sl-out" id="outBtn" title="Choose speakers / headphones"><svg><use href="#i-chev"/></svg></button>
         </div>
         <div class="tile slider span2" id="briSlider" data-kind="brightness">
           <i class="fill"></i>
@@ -162,18 +179,27 @@
         </section>
 
         <!-- calendar: today's date + next events -->
-        <section class="tile white cal-date" id="calDate" title="Today">
+        <section class="tile white cal-date" id="calDate" title="Open calendar">
           <span class="cd-day" id="cdDay"></span>
           <div class="cd-num" id="cdNum"></div>
           <span class="cd-mon" id="cdMon"></span>
         </section>
-        <section class="tile dark agenda span3" id="agenda">
+        <section class="tile dark agenda span3" id="agenda" title="Open calendar">
           <div class="ag-head">
             <span class="label" id="agLabel">UP NEXT</span>
             <span class="week" id="week"></span>
           </div>
           <div class="ag-list" id="agList"></div>
         </section>
+      </div>
+      <!-- pickers: Wi-Fi / Bluetooth / sound output / calendar (one view, filled by app.js) -->
+      <div class="sub" id="subView">
+        <div class="sub-head">
+          <button class="sub-back" id="subBack" title="Back"><svg><use href="#i-back"/></svg></button>
+          <span class="sub-title" id="subTitle"></span>
+          <span class="sub-acts" id="subActs"></span>
+        </div>
+        <div class="sub-body" id="subBody"></div>
       </div>
       <!-- island settings (gear) -->
       <div class="settings" id="settingsView">

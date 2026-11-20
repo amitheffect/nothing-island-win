@@ -117,6 +117,8 @@
   function collapse() {
     S.expanded = false;
     if (panel.classList.contains('show-settings')) setTimeout(() => toggleSettings(false), 400);
+    if (panel.classList.contains('show-sub')) setTimeout(() => { if (!S.expanded) closeSub(); }, 400);
+    if (document.activeElement && panel.contains(document.activeElement)) document.activeElement.blur();
     layout();
   }
 
@@ -130,7 +132,7 @@
   island.addEventListener('mouseleave', () => {
     S.hover = false;
     if (S.expanded) {
-      leaveTimer = setTimeout(() => { if (!S.hover && !dragging) collapse(); }, 650);
+      leaveTimer = setTimeout(() => { if (!S.hover && !dragging && !typing()) collapse(); }, 650);
     }
     layout();
   });
@@ -157,12 +159,15 @@
     if (inside) { clearTimeout(leaveTimer); S.hover = true; layout(); }
     else {
       S.hover = false;
-      if (S.expanded) leaveTimer = setTimeout(() => { if (!S.hover && !dragging) collapse(); }, 650);
+      if (S.expanded) leaveTimer = setTimeout(() => { if (!S.hover && !dragging && !typing()) collapse(); }, 650);
       layout();
     }
   });
   api.onBlur(() => { if (S.expanded && !S.hover) collapse(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') collapse(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (panel.classList.contains('show-sub')) closeSub(); else collapse();
+  });
 
   // ---------------------------------------------------------------- collapsed pill
   const pillArt = document.createElement('canvas');
@@ -494,8 +499,6 @@
     renderRadios();
     setTimeout(slowPoll, 1500);
   }
-  $('wifiBtn').addEventListener('click', () => toggleRadio('WiFi', $('wifiBtn'), $('wifiSub'), 'ms-settings:network-wifi'));
-  $('btBtn').addEventListener('click', () => toggleRadio('Bluetooth', $('btBtn'), $('btSub'), 'ms-settings:bluetooth'));
   $('wifiBtn').addEventListener('contextmenu', (e) => { e.preventDefault(); api.sys('open', 'ms-settings:network-wifi'); });
   $('btBtn').addEventListener('contextmenu', (e) => { e.preventDefault(); api.sys('open', 'ms-settings:bluetooth'); });
 
@@ -889,20 +892,20 @@
     }).join('');
 
     const list = $('agList');
-    if (!S.cal.configured) {
-      list.innerHTML = '<div class="ag-empty">No calendar connected. <button id="agConnect">Add your calendar link</button> to see meetings here.</div>';
-      $('agConnect').addEventListener('click', () => toggleSettings(true));
+    if (!S.cal.configured && !S.cal.events.length) {
+      list.innerHTML = '<div class="ag-empty">Tap to open the calendar and add events, or <button id="agConnect">link your Google / Outlook calendar</button>.</div>';
+      $('agConnect').addEventListener('click', (e) => { e.stopPropagation(); toggleSettings(true); });
       $('agLabel').textContent = 'CALENDAR';
       return;
     }
-    if (!S.cal.ok) {
+    if (S.cal.configured && !S.cal.ok && !S.cal.events.length) {
       list.innerHTML = `<div class="ag-empty">Couldn't load your calendar: ${esc(S.cal.error || 'unknown error')}</div>`;
       return;
     }
     const now = Date.now();
     const items = S.cal.events.filter((e) => e.end > now).slice(0, 3);
     $('agLabel').textContent = items.length ? 'UP NEXT' : 'CALENDAR';
-    if (!items.length) { list.innerHTML = '<div class="ag-empty">Nothing scheduled for today or tomorrow.</div>'; return; }
+    if (!items.length) { list.innerHTML = '<div class="ag-empty">Nothing scheduled for today or tomorrow. Tap to plan something.</div>'; return; }
     const today = new Date().toDateString();
     list.innerHTML = items.map((e, i) => {
       const s = new Date(e.start);
@@ -912,7 +915,8 @@
       return `<div class="ag-row${live ? ' live' : ''}"><span class="d"></span><span class="t">${when}</span>` +
         `<span class="n">${tmrw}${esc(e.title)}</span>${e.url ? `<button class="j" data-i="${i}">JOIN</button>` : ''}</div>`;
     }).join('');
-    list.querySelectorAll('.j').forEach((b) => b.addEventListener('click', () => {
+    list.querySelectorAll('.j').forEach((b) => b.addEventListener('click', (clk) => {
+      clk.stopPropagation();
       const ev = items[+b.dataset.i];
       if (ev && ev.url && api.openUrl) api.openUrl(ev.url);
     }));
@@ -949,12 +953,392 @@
 
   function toggleSettings(force) {
     const show = force === undefined ? !panel.classList.contains('show-settings') : force;
+    if (show) closeSub();
     if (show) $('settingsView').style.minHeight = panel.querySelector('.grid').offsetHeight + 'px';
     panel.classList.toggle('show-settings', show);
     renderCalStatus();
     layout();
     if (show) setTimeout(() => $('calInput').focus(), 300);
   }
+
+  // ---------------------------------------------------------------- pickers: Wi-Fi / Bluetooth / output / calendar
+  // One sub-view inside the panel. Each picker renders its own body; the island keeps its size
+  // (min-height = the grid) so it doesn't jump around while lists load.
+  const sub = { view: null, token: 0 };
+  const svIcon = (id) => `<svg><use href="#${id}"/></svg>`;
+  const ROW_ICON = { audio: 'i-headphones', keyboard: 'i-keyboard', mouse: 'i-mouse', phone: 'i-phone', gamepad: 'i-pad', watch: 'i-dev', device: 'i-dev' };
+
+  function openSub(view) {
+    if (panel.classList.contains('show-settings')) toggleSettings(false);
+    $('subView').style.minHeight = '250px';     // lists size the island; this just avoids a jump while loading
+    sub.view = view;
+    sub.token++;
+    panel.classList.add('show-sub');
+    $('subActs').innerHTML = '';
+    $('subBody').innerHTML = '<div class="sv-list"><div class="sv-empty">LOADING…</div></div>';
+    ({ wifi: wifiView, bt: btView, audio: audioView, cal: calView })[view]();
+    layout();
+  }
+  function closeSub() {
+    if (!panel.classList.contains('show-sub')) return;
+    sub.view = null;
+    sub.token++;
+    clearTimeout(sub.timer);
+    panel.classList.remove('show-sub');
+    layout();
+  }
+  $('subBack').addEventListener('click', closeSub);
+  const setTitle = (txt) => { $('subTitle').innerHTML = `<span class="label" style="color:var(--white)">${esc(txt)}</span>`; };
+  const relayout = () => requestAnimationFrame(layout);
+  // typing in a picker: keep the island open even if the mouse wanders off
+  const typing = () => { const a = document.activeElement; return !!(a && panel.contains(a) && (a.tagName === 'INPUT' || a.tagName === 'SELECT')); };
+  panel.addEventListener('focusin', (e) => { if (e.target.matches('input,select')) syncInteractive(true); });
+
+  function radioSwitch(kind) {
+    const key = kind === 'WiFi' ? 'wifi' : 'bluetooth';
+    const sw = document.createElement('button');
+    sw.className = 'switch' + (S.radios[key] === 'On' ? ' on' : '');
+    sw.title = 'Turn ' + (kind === 'WiFi' ? 'Wi-Fi' : 'Bluetooth') + ' on / off';
+    sw.innerHTML = '<i></i>';
+    sw.addEventListener('click', async () => {
+      const next = S.radios[key] === 'On' ? 'Off' : 'On';
+      sw.classList.toggle('on', next === 'On');
+      const r = await api.sys('setRadio', { kind, state: next });
+      if (!r.ok) { sw.classList.toggle('on', next !== 'On'); return; }
+      S.radios[key] = next;
+      renderRadios();
+      setTimeout(() => { if (sub.view) openSub(sub.view); }, next === 'On' ? 2500 : 300);
+    });
+    return sw;
+  }
+  function iconBtn(icon, title, fn) {
+    const b = document.createElement('button');
+    b.className = 'sub-ic'; b.title = title; b.innerHTML = svIcon(icon);
+    b.addEventListener('click', fn);
+    return b;
+  }
+  function footButtons(list) {
+    return `<div class="sv-foot">${list.map((x, i) => `<button class="set-btn${x.prim ? ' prim' : ''}" data-f="${i}">${esc(x.label)}</button>`).join('')}</div>`;
+  }
+  function bindFoot(list) {
+    $('subBody').querySelectorAll('.sv-foot [data-f]').forEach((b) => b.addEventListener('click', () => list[+b.dataset.f].fn()));
+  }
+  const openWin = (uri) => api.sys('open', uri);
+
+  // ---- Wi-Fi
+  const SEC_LABEL = { open: 'OPEN', owe: 'OPEN · ENCRYPTED', wpa: 'SECURED', wpa2: 'SECURED', wpa3: 'SECURED · WPA3', enterprise: 'WORK / SCHOOL', other: 'SECURED' };
+  const wifiUi = { open: null, msg: {}, nets: [] };
+  async function wifiView(rescan = true) {
+    const tk = sub.token;
+    setTitle('WI-FI');
+    const acts = $('subActs'); acts.innerHTML = '';
+    const rf = iconBtn('i-reset', 'Scan again', () => { rf.classList.add('spin'); wifiView(true); });
+    acts.append(rf, radioSwitch('WiFi'));
+    const foot = [{ label: 'WI-FI SETTINGS', fn: () => openWin('ms-settings:network-wifi') }];
+    if (S.radios.wifi !== 'On') {
+      $('subBody').innerHTML = `<div class="sv-list"><div class="sv-empty">Wi-Fi is off.<br/><button class="set-btn" id="wOn">TURN ON</button></div></div>` + footButtons(foot);
+      $('wOn').addEventListener('click', () => acts.querySelector('.switch').click());
+      bindFoot(foot); relayout(); return;
+    }
+    if (rescan) { api.sys('wifiScan'); }
+    await wifiLoad(tk);
+    if (rescan) { clearTimeout(sub.timer); sub.timer = setTimeout(() => { if (sub.token === tk) wifiLoad(tk).then(() => rf.classList.remove('spin')); }, 3500); }
+  }
+  async function wifiLoad(tk) {
+    const r = await api.sys('wifiList');
+    if (sub.token !== tk) return;
+    const foot = [{ label: 'WI-FI SETTINGS', fn: () => openWin('ms-settings:network-wifi') }];
+    if (!r.ok) {
+      const loc = /location/i.test(r.error || '');
+      $('subBody').innerHTML = `<div class="sv-list"><div class="sv-empty">${loc
+        ? 'Windows only shows nearby Wi-Fi networks to apps that have <b style="color:#fff">location access</b>.<br/>Turn on “Let desktop apps access your location”, then come back.<br/><button class="set-btn" id="wLoc">OPEN LOCATION SETTINGS</button>'
+        : 'Couldn’t read Wi-Fi networks: ' + esc(r.error || 'unknown error')}</div></div>` + footButtons(foot);
+      if (loc) $('wLoc').addEventListener('click', () => openWin('ms-settings:privacy-location'));
+      bindFoot(foot); relayout(); return;
+    }
+    wifiUi.nets = r.data.networks || [];
+    renderWifi();
+  }
+  function renderWifi() {
+    const nets = wifiUi.nets;
+    const foot = [{ label: 'WI-FI SETTINGS', fn: () => openWin('ms-settings:network-wifi') }];
+    const bars = (s) => { const n = s >= 75 ? 4 : s >= 50 ? 3 : s >= 25 ? 2 : 1; return `<span class="sig">${[1, 2, 3, 4].map((i) => `<b class="${i <= n ? 'l' : ''}"></b>`).join('')}</span>`; };
+    const rows = nets.map((n, i) => {
+      const m = wifiUi.msg[n.ssid];
+      const status = m ? `<span class="sv-sub${m.err ? ' err' : ''}">${esc(m.text)}</span>`
+        : `<span class="sv-sub">${n.connected ? 'CONNECTED' : n.known ? 'SAVED' : SEC_LABEL[n.security] || 'SECURED'}</span>`;
+      let extra = '';
+      if (wifiUi.open === n.ssid) {
+        if (n.connected) {
+          extra = `<div class="sv-acts"><button class="set-btn ghost" data-a="disc">DISCONNECT</button><button class="set-btn ghost" data-a="forget">FORGET</button></div>`;
+        } else if (n.security === 'enterprise') {
+          extra = `<div class="sv-acts"><span class="sv-note">Work / school networks need a sign-in — finish it in Windows.</span><button class="set-btn" data-a="win">OPEN</button></div>`;
+        } else if (!n.known && n.security !== 'open' && n.security !== 'owe' || wifiUi.askPw === n.ssid) {
+          extra = `<div class="sv-form"><input type="password" maxlength="64" placeholder="Password" autocomplete="off" spellcheck="false" data-pw="${i}"/><button class="set-btn" data-a="join">JOIN</button></div>`;
+        } else {
+          extra = `<div class="sv-acts"><button class="set-btn" data-a="join">CONNECT</button>${n.known ? '<button class="set-btn ghost" data-a="forget">FORGET</button>' : ''}</div>`;
+        }
+      }
+      return `<div class="sv-item" data-i="${i}"><button class="sv-row${n.connected ? ' on' : ''}" data-row="${i}">` +
+        `<span class="sv-ic">${svIcon('i-wifi')}</span><span class="sv-txt"><span class="sv-name">${esc(n.ssid)}</span>${status}</span>` +
+        `<span class="sv-end">${n.security !== 'open' && n.security !== 'owe' ? svIcon('i-padlock') : ''}${bars(n.signal)}</span></button>${extra}</div>`;
+    }).join('');
+    $('subBody').innerHTML = `<div class="sv-list">${rows || '<div class="sv-empty">No networks found nearby.</div>'}</div>` + footButtons(foot);
+    bindFoot(foot);
+    const body = $('subBody');
+    body.querySelectorAll('[data-row]').forEach((b) => b.addEventListener('click', () => {
+      const n = nets[+b.dataset.row];
+      // one click on a saved / open network connects straight away; others open the row
+      if (wifiUi.open !== n.ssid && !n.connected && (n.known || n.security === 'open' || n.security === 'owe') && wifiUi.askPw !== n.ssid) { wifiJoin(n, null); return; }
+      wifiUi.open = wifiUi.open === n.ssid ? null : n.ssid;
+      renderWifi();
+    }));
+    body.querySelectorAll('.sv-item').forEach((it) => {
+      const n = nets[+it.dataset.i];
+      it.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => {
+        const a = b.dataset.a;
+        if (a === 'disc') wifiDisconnect();
+        else if (a === 'forget') wifiForget(n);
+        else if (a === 'win') openWin('ms-settings:network-wifi');
+        else if (a === 'join') { const pw = it.querySelector('[data-pw]'); wifiJoin(n, pw ? pw.value : null); }
+      }));
+      const pw = it.querySelector('[data-pw]');
+      if (pw) {
+        pw.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') wifiJoin(n, pw.value); if (e.key === 'Escape') { wifiUi.open = null; renderWifi(); } });
+        setTimeout(() => pw.focus(), 30);
+      }
+    });
+    relayout();
+  }
+  function wifiMsg(ssid, text, err) { if (text) wifiUi.msg[ssid] = { text, err }; else delete wifiUi.msg[ssid]; }
+  async function wifiJoin(n, password) {
+    if (password != null) {
+      if (password.length < 8) { wifiMsg(n.ssid, 'PASSWORD IS AT LEAST 8 CHARACTERS', true); renderWifi(); return; }
+    }
+    const tk = sub.token;
+    wifiMsg(n.ssid, 'CONNECTING…');
+    wifiUi.open = null; wifiUi.askPw = null;
+    renderWifi();
+    const r = await api.sys('wifiConnect', { ssid: n.ssid, password: password || null });
+    if (sub.token !== tk) return;
+    if (!r.ok) {
+      const enterprise = /enterprise/i.test(r.error || '');
+      wifiMsg(n.ssid, enterprise ? 'FINISH SIGN-IN IN WINDOWS' : (r.error || 'COULDN’T CONNECT').toUpperCase(), true);
+      if (enterprise) openWin('ms-settings:network-wifi');
+      renderWifi(); return;
+    }
+    if (r.data === 'password') { wifiUi.open = n.ssid; wifiUi.askPw = n.ssid; wifiMsg(n.ssid, null); renderWifi(); return; }
+    // Windows connects in the background: check a few times
+    let tries = 0;
+    const check = async () => {
+      if (sub.token !== tk) return;
+      const l = await api.sys('wifiList');
+      if (sub.token !== tk || !l.ok) return;
+      wifiUi.nets = l.data.networks || [];
+      const now = wifiUi.nets.find((x) => x.ssid === n.ssid);
+      if (now && now.connected) { wifiMsg(n.ssid, null); renderWifi(); slowPoll(); return; }
+      if (++tries < 6) { sub.timer = setTimeout(check, 2000); return; }
+      wifiMsg(n.ssid, password || !n.known ? 'COULDN’T CONNECT — CHECK THE PASSWORD' : 'COULDN’T CONNECT', true);
+      wifiUi.open = n.ssid; wifiUi.askPw = n.ssid;      // let them retype the password
+      renderWifi();
+    };
+    sub.timer = setTimeout(check, 2000);
+  }
+  async function wifiDisconnect() {
+    await api.sys('wifiDisconnect');
+    wifiUi.open = null;
+    setTimeout(() => { if (sub.view === 'wifi') wifiView(false); slowPoll(); }, 1200);
+  }
+  async function wifiForget(n) {
+    const r = await api.sys('wifiForget', n.profile || n.ssid);
+    wifiUi.open = null;
+    if (!r.ok) wifiMsg(n.ssid, (r.error || 'COULDN’T FORGET').toUpperCase(), true);
+    setTimeout(() => { if (sub.view === 'wifi') wifiView(false); slowPoll(); }, 800);
+  }
+
+  // ---- Bluetooth
+  async function btView() {
+    const tk = sub.token;
+    setTitle('BLUETOOTH');
+    const acts = $('subActs'); acts.innerHTML = '';
+    acts.append(iconBtn('i-reset', 'Refresh', () => btView()), radioSwitch('Bluetooth'));
+    const foot = [
+      { label: '+ ADD DEVICE', prim: true, fn: () => openWin('ms-settings-connectabledevices:devicediscovery') },
+      { label: 'BLUETOOTH SETTINGS', fn: () => openWin('ms-settings:bluetooth') },
+    ];
+    if (S.radios.bluetooth !== 'On') {
+      $('subBody').innerHTML = `<div class="sv-list"><div class="sv-empty">Bluetooth is off.<br/><button class="set-btn" id="bOn">TURN ON</button></div></div>` + footButtons(foot);
+      $('bOn').addEventListener('click', () => acts.querySelector('.switch').click());
+      bindFoot(foot); relayout(); return;
+    }
+    const r = await api.sys('btList');
+    if (sub.token !== tk) return;
+    const devs = r.ok && r.data ? r.data.devices || [] : [];
+    const rows = devs.map((d, i) => `<button class="sv-row${d.connected ? ' on' : ''}" data-d="${i}"><span class="sv-ic">${svIcon(ROW_ICON[d.kind] || 'i-dev')}</span>` +
+      `<span class="sv-txt"><span class="sv-name">${esc(d.name)}</span><span class="sv-sub">${d.connected ? 'CONNECTED' : 'PAIRED'}</span></span>` +
+      `<span class="sv-end">${svIcon('i-chev')}</span></button>`).join('');
+    $('subBody').innerHTML = `<div class="sv-list">${rows || `<div class="sv-empty">${r.ok ? 'No paired devices yet.' : 'Couldn’t list devices: ' + esc(r.error || 'unknown error')}</div>`}</div>` +
+      `<div class="sv-note">Connect or disconnect a paired device in Windows (tap it). New devices: put them in pairing mode, then <b style="color:#c7c7cc">Add device</b>.</div>` + footButtons(foot);
+    bindFoot(foot);
+    $('subBody').querySelectorAll('[data-d]').forEach((b) => b.addEventListener('click', () => openWin('ms-settings:bluetooth')));
+    relayout();
+    clearTimeout(sub.timer);
+    sub.timer = setTimeout(() => { if (sub.token === tk) btView(); }, 8000);   // keep status fresh while open
+  }
+
+  // ---- Sound output
+  async function audioView() {
+    const tk = sub.token;
+    setTitle('SOUND OUTPUT');
+    $('subActs').innerHTML = '';
+    const r = await api.sys('audioOutputs');
+    if (sub.token !== tk) return;
+    const foot = [{ label: 'SOUND SETTINGS', fn: () => openWin('ms-settings:sound') }, { label: 'VOLUME MIXER', fn: () => openWin('ms-settings:apps-volume') }];
+    const devs = r.ok && r.data ? r.data.devices || [] : [];
+    const ico = (n) => /hdmi|displayport|display audio|monitor|nvidia|\bamd\b|intel\(r\) display/i.test(n) ? 'i-monitor'
+      : /\b(head(phone|set)s?|ear(buds?|phones?)?|buds|airpods|hands-free)\b/i.test(n) ? 'i-headphones' : 'i-speaker';
+    const split = (n) => { const m = n.match(/^(.*?)\s*\((.+)\)$/); return m ? [m[1], m[2]] : [n, '']; };
+    const rows = devs.map((d, i) => {
+      const [a, b] = split(d.name);
+      return `<button class="sv-row${d.active ? ' on' : ''}" data-o="${i}"><span class="sv-ic">${svIcon(ico(d.name))}</span>` +
+        `<span class="sv-txt"><span class="sv-name">${esc(a)}</span><span class="sv-sub">${esc(d.active ? 'IN USE' + (b ? ' · ' + b : '') : b || 'OUTPUT')}</span></span>` +
+        `<span class="sv-end">${d.active ? '<svg class="chk"><use href="#i-check"/></svg>' : ''}</span></button>`;
+    }).join('');
+    $('subBody').innerHTML = `<div class="sv-list">${rows || `<div class="sv-empty">${r.ok ? 'No speakers or headphones found.' : 'Couldn’t list outputs: ' + esc(r.error || 'unknown error')}</div>`}</div>` + footButtons(foot);
+    bindFoot(foot);
+    $('subBody').querySelectorAll('[data-o]').forEach((b) => b.addEventListener('click', async () => {
+      const d = devs[+b.dataset.o];
+      if (d.active) return;
+      b.classList.add('busy');
+      const res = await api.sys('setAudioOutput', d.id);
+      if (sub.token !== tk) return;
+      if (!res.ok) { b.classList.remove('busy'); b.querySelector('.sv-sub').textContent = (res.error || 'COULDN’T SWITCH').toUpperCase(); b.querySelector('.sv-sub').classList.add('err'); return; }
+      audioView();
+      fastPoll();
+    }));
+    relayout();
+  }
+
+  // ---- Calendar (month view + your own events + marked days)
+  const cal = { month: null, sel: null, data: { events: [], marks: [], linked: false } };
+  const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const sameDay = (a, b) => a.toDateString() === b.toDateString();
+  function calGridStart(m) { const f = new Date(m.getFullYear(), m.getMonth(), 1); f.setDate(f.getDate() - ((f.getDay() + 6) % 7)); return f; }
+  function calView() {
+    const now = new Date();
+    if (!cal.month) cal.month = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (!cal.sel) cal.sel = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const acts = $('subActs'); acts.innerHTML = '';
+    const nav = (d) => () => { cal.month = new Date(cal.month.getFullYear(), cal.month.getMonth() + d, 1); calLoad(); };
+    const prev = document.createElement('button'); prev.className = 'cal-nav'; prev.title = 'Previous month'; prev.innerHTML = svIcon('i-back'); prev.onclick = nav(-1);
+    const next = document.createElement('button'); next.className = 'cal-nav'; next.title = 'Next month'; next.innerHTML = svIcon('i-chev'); next.onclick = nav(1);
+    const today = document.createElement('button'); today.className = 'cal-today'; today.textContent = 'TODAY';
+    today.onclick = () => { const n = new Date(); cal.month = new Date(n.getFullYear(), n.getMonth(), 1); cal.sel = new Date(n.getFullYear(), n.getMonth(), n.getDate()); calLoad(); };
+    acts.append(today, prev, next);
+    calLoad();
+  }
+  async function calLoad() {
+    const tk = sub.token;
+    const m = cal.month;
+    $('subTitle').innerHTML = DM.text(m.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() + ' ' + m.getFullYear(), { dot: 2.4, gap: 0.9, color: '#fff' });
+    const from = calGridStart(m).getTime();
+    const to = from + 42 * 86400e3 + 3 * 3600e3;            // +3 h covers a daylight-saving change
+    if (api.calRange) {
+      const r = await api.calRange(from, to);
+      if (sub.token !== tk) return;
+      if (r && r.ok) cal.data = r;
+    }
+    renderCal();
+  }
+  function eventsOn(day) {
+    const s = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+    const e = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
+    return cal.data.events.filter((ev) => (ev.allDay ? ev.start < e && ev.end > s : ev.start < e && ev.end > s) || (ev.start === ev.end && ev.start >= s && ev.start < e));
+  }
+  function renderCal() {
+    const m = cal.month, now = new Date();
+    const start = calGridStart(m);
+    const marks = new Set(cal.data.marks || []);
+    let cells = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((w, i) => `<span class="wd${i > 4 ? ' we' : ''}">${w}</span>`).join('');
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      if (i === 35 && d.getMonth() !== m.getMonth()) break;      // 5-row months stay compact
+      const evs = eventsOn(d);
+      const dots = evs.slice(0, 3).map((e) => `<i class="${e.local ? 'mine' : ''}"></i>`).join('');
+      cells += `<button class="mday${d.getMonth() !== m.getMonth() ? ' out' : ''}${sameDay(d, now) ? ' today' : ''}${sameDay(d, cal.sel) ? ' sel' : ''}" data-k="${i}" title="${d.toDateString()}">` +
+        `${marks.has(dayKey(d)) ? '<span class="mk"></span>' : ''}<span>${d.getDate()}</span><span class="ev">${dots}</span></button>`;
+    }
+    const sel = cal.sel;
+    const list = eventsOn(sel);
+    const fmtT = (t) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).toUpperCase();
+    const items = list.map((e, i) => `<div class="de${e.local ? ' mine' : ''}"><span class="d"></span><span class="t">${e.allDay ? 'ALL DAY' : fmtT(e.start)}</span>` +
+      `<span class="n" title="${esc(e.title)}">${esc(e.title)}</span>${e.local ? `<button class="rm" data-rm="${i}" title="Remove">${svIcon('i-x')}</button>` : '<span class="src">CAL</span>'}</div>`).join('');
+    const marked = marks.has(dayKey(sel));
+    const nowH = new Date(); nowH.setMinutes(Math.ceil((nowH.getMinutes() + 1) / 15) * 15);
+    const defT = `${String(nowH.getHours() % 24).padStart(2, '0')}:${String(nowH.getMinutes() % 60).padStart(2, '0')}`;
+    $('subBody').innerHTML = `<div class="mgrid">${cells}</div>` +
+      `<div class="dayp"><div class="dayp-head"><span class="dayp-title">${sel.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase()}</span>` +
+      `<button class="mark-btn${marked ? ' on' : ''}" id="calMark" title="Mark this day"><i></i>${marked ? 'MARKED' : 'MARK DAY'}</button></div>` +
+      `<div class="dayp-list">${items || `<div class="de-empty">${cal.data.linked ? 'Nothing on this day.' : 'Nothing yet — add something below.'}</div>`}</div>` +
+      `<div class="addf"><input class="ttl" id="calTtl" maxlength="80" placeholder="Add event…" spellcheck="false"/>` +
+      `<input type="time" id="calTime" value="${cal.lastTime || defT}"/>` +
+      `<select id="calDur" title="Length"><option value="15">15 M</option><option value="30">30 M</option><option value="60" selected>1 H</option><option value="90">1.5 H</option><option value="120">2 H</option><option value="180">3 H</option><option value="all">ALL DAY</option></select>` +
+      `<button class="add" id="calAdd" title="Add">${svIcon('i-plus')}</button></div><div class="addf-msg" id="calMsg"></div></div>`;
+    const body = $('subBody');
+    body.querySelectorAll('.mday').forEach((b) => b.addEventListener('click', () => {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + +b.dataset.k);
+      cal.sel = d;
+      if (d.getMonth() !== m.getMonth()) { cal.month = new Date(d.getFullYear(), d.getMonth(), 1); calLoad(); } else renderCal();
+    }));
+    body.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', async () => {
+      const ev = list[+b.dataset.rm];
+      if (!api.calRemove) return;
+      const r = await api.calRemove(ev.id);
+      if (r && r.ok) calLoad(); else $('calMsg').textContent = ((r && r.error) || 'Couldn’t remove').toUpperCase();
+    }));
+    $('calMark').addEventListener('click', async () => {
+      if (!api.calMark) return;
+      const r = await api.calMark(dayKey(sel), !marked);
+      if (r && r.ok) { cal.data.marks = r.marks; renderCal(); }
+    });
+    const dur = $('calDur'), time = $('calTime');
+    dur.value = cal.lastDur || '60';
+    const syncAllDay = () => { time.disabled = dur.value === 'all'; time.style.opacity = time.disabled ? .35 : 1; };
+    dur.addEventListener('change', syncAllDay); syncAllDay();
+    const add = async () => {
+      const title = $('calTtl').value.trim();
+      if (!title) { $('calMsg').textContent = 'GIVE IT A NAME FIRST'; $('calTtl').focus(); return; }
+      const allDay = dur.value === 'all';
+      let s, e;
+      if (allDay) { s = new Date(sel.getFullYear(), sel.getMonth(), sel.getDate()).getTime(); e = new Date(sel.getFullYear(), sel.getMonth(), sel.getDate() + 1).getTime(); }
+      else {
+        const [hh, mm] = (time.value || '09:00').split(':').map(Number);
+        s = new Date(sel.getFullYear(), sel.getMonth(), sel.getDate(), hh, mm).getTime();
+        e = s + +dur.value * 60000;
+      }
+      cal.lastTime = time.value; cal.lastDur = dur.value;
+      const r = api.calAdd ? await api.calAdd({ title, start: s, end: e, allDay }) : { ok: false, error: 'unavailable' };
+      if (r && r.ok) calLoad(); else $('calMsg').textContent = ((r && r.error) || 'Couldn’t add').toUpperCase();
+    };
+    $('calAdd').addEventListener('click', add);
+    [$('calTtl'), time, dur].forEach((el) => el.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') add(); if (e.key === 'Escape') el.blur(); }));
+    relayout();
+  }
+
+  // entry points
+  function pillClick(kind, btn, subEl, uri, view) {
+    return (e) => {
+      if (e.target.closest('.pb-ico')) { toggleRadio(kind, btn, subEl, uri); return; }
+      if (S.radios[kind === 'WiFi' ? 'wifi' : 'bluetooth'] == null) { openWin(uri); return; }
+      openSub(view);
+    };
+  }
+  $('wifiBtn').addEventListener('click', pillClick('WiFi', $('wifiBtn'), $('wifiSub'), 'ms-settings:network-wifi', 'wifi'));
+  $('btBtn').addEventListener('click', pillClick('Bluetooth', $('btBtn'), $('btSub'), 'ms-settings:bluetooth', 'bt'));
+  $('outBtn').addEventListener('click', (e) => { e.stopPropagation(); openSub('audio'); });
+  $('volSlider').addEventListener('contextmenu', (e) => { e.preventDefault(); openSub('audio'); });
+  $('calDate').addEventListener('click', () => openSub('cal'));
+  $('agenda').addEventListener('click', (e) => { if (!e.target.closest('button')) openSub('cal'); });
 
   // ---------------------------------------------------------------- gestures on the collapsed pill
   // swipe left = next, swipe right = previous, hold = play/pause, click = open panel
@@ -1060,6 +1444,18 @@
       onCalendar(cb) { window.__cal = cb; },
       async setCalendar() { return { ok: true }; },
       openUrl() {},
+      async calRange(from, to) {
+        const t = new Date(); t.setHours(0, 0, 0, 0);
+        const d = (n, h, m = 0) => t.getTime() + n * 86400e3 + (h * 60 + m) * 60000;
+        st.local = st.local || [{ id: 'local:1', title: 'Expression Saver demo', start: d(0, 16), end: d(0, 17), local: true, allDay: false }];
+        st.marks = st.marks || [];
+        return { ok: true, linked: true, marks: st.marks, events: [
+          { id: 'x', title: 'Bizkit stand-up', start: d(0, 10), end: d(0, 10, 30) }, { id: 'y', title: 'Client call — BuildX', start: d(1, 15), end: d(1, 16) },
+          { id: 'z', title: 'Holiday', start: d(4, 0), end: d(5, 0), allDay: true }, ...st.local].filter((e) => e.end > from && e.start < to) };
+      },
+      async calAdd(e) { st.local.push({ ...e, id: 'local:' + Math.random(), local: true }); return { ok: true }; },
+      async calRemove(id) { st.local = st.local.filter((e) => e.id !== id); return { ok: true }; },
+      async calMark(day, on) { st.marks = on ? [...st.marks, day] : st.marks.filter((x) => x !== day); return { ok: true, marks: st.marks }; },
       setStyle() {},
       onReady(cb) { h.ready = cb; },
       async sys(cmd, arg) {
@@ -1074,6 +1470,21 @@
           case 'setDark': st.dark = arg; break;
           case 'media': if (arg === 'toggle') st.playing = !st.playing; break;
           case 'setRadio': if (arg.kind === 'WiFi') st.wifi = arg.state; else st.bt = arg.state; break;
+          case 'wifiList': return { ok: true, data: { current: 'Bizkit 5G', networks: [
+            { ssid: 'Bizkit 5G', signal: 92, security: 'wpa2', known: true, profile: 'Bizkit 5G', connected: true },
+            { ssid: 'Bizkit Guest', signal: 71, security: 'wpa2', known: true, profile: 'Bizkit Guest', connected: false },
+            { ssid: 'Zevox Studio', signal: 58, security: 'wpa3', known: false, profile: null, connected: false },
+            { ssid: 'Cafe Free WiFi', signal: 34, security: 'open', known: false, profile: null, connected: false },
+            { ssid: 'Office-Corp', signal: 22, security: 'enterprise', known: false, profile: null, connected: false }] } };
+          case 'wifiConnect': return { ok: true, data: arg.password || arg.ssid !== 'Zevox Studio' ? 'connecting' : 'password' };
+          case 'btList': return { ok: true, data: { devices: [
+            { name: 'Nothing Ear (2)', connected: true, kind: 'audio' }, { name: 'MX Master 3S', connected: true, kind: 'mouse' },
+            { name: 'Keychron K2', connected: false, kind: 'keyboard' }, { name: 'Pixel 8', connected: false, kind: 'phone' }] } };
+          case 'audioOutputs': return { ok: true, data: { devices: [
+            { id: 'a', name: 'Speakers (Realtek(R) Audio)', active: !st.out || st.out === 'a' },
+            { id: 'b', name: 'Headphones (Nothing Ear (2))', active: st.out === 'b' },
+            { id: 'c', name: 'LG ULTRAGEAR (NVIDIA High Definition Audio)', active: st.out === 'c' }] } };
+          case 'setAudioOutput': st.out = arg; break;
         }
         return { ok: true, data: null };
       },

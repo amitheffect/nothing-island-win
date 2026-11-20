@@ -17,8 +17,8 @@
   "build": {
     "appId": "in.bizkit.nothingisland",
     "productName": "Nothing Island",
-    "asarUnpack": ["bridge.ps1", "bridge.cs"],
-    "files": ["main.js", "calendar.js", "preload.js", "bridge.ps1", "bridge.cs", "renderer/**/*"],
+    "asarUnpack": ["bridge.ps1", "bridge.cs", "devices.cs"],
+    "files": ["main.js", "calendar.js", "preload.js", "bridge.ps1", "bridge.cs", "devices.cs", "renderer/**/*"],
     "win": {
       "target": ["portable", "nsis"]
     }

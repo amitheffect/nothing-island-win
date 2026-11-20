@@ -242,6 +242,11 @@ namespace NI {
 }
 "@
 
+# ---------------------------------------------------------------- pickers (Wi-Fi / outputs / Bluetooth)
+$script:hasDevices = $true
+try { Add-Type -Path (Join-Path $PSScriptRoot 'devices.cs') } catch { $script:hasDevices = $false }
+function Need-Devices { if (-not $script:hasDevices) { throw 'Device pickers are unavailable' } }
+
 # ---------------------------------------------------------------- WinRT plumbing
 $script:winrt = $true
 try {
@@ -615,12 +620,24 @@ function Invoke-Cmd($cmd, $arg) {
     'setDark'   { Set-Dark ([bool]$arg); return $null }
     'lock'      { Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\rundll32.exe') -ArgumentList 'user32.dll,LockWorkStation'; return $null }
     'diag'      { $d = Get-PrivacyDiag; $d.engine = 'powershell'; return $d }
+    'wifiList'  { Need-Devices; return [NI.Dev.Wifi]::List() }
+    'wifiScan'  { Need-Devices; [NI.Dev.Wifi]::Scan(); return $null }
+    'wifiConnect' {
+      Need-Devices
+      $pw = $null; if ($null -ne $arg.password) { $pw = [string]$arg.password }
+      return [NI.Dev.Wifi]::Connect([string]$arg.ssid, $pw)
+    }
+    'wifiForget' { Need-Devices; [NI.Dev.Wifi]::Forget([string]$arg); return $null }
+    'wifiDisconnect' { Need-Devices; [NI.Dev.Wifi]::Disconnect(); return $null }
+    'audioOutputs' { Need-Devices; return [NI.Dev.Outputs]::List() }
+    'setAudioOutput' { Need-Devices; [NI.Dev.Outputs]::Set([string]$arg); return $null }
+    'btList'    { Need-Devices; return [NI.Dev.Bluetooth]::List() }
     'trim'      { return [NI.Mem]::Trim([int[]]@($arg | Select-Object -First 64)) }
     'snip'      { Start-Process 'ms-screenclip:'; return $null }
     'open'      {
       # strict allowlist: only Windows Settings pages (e.g. ms-settings:bluetooth)
       $uri = [string]$arg
-      if ($uri -cnotmatch '^ms-settings:[a-z0-9\-]{0,64}$') { throw 'Blocked URI' }
+      if ($uri -cnotmatch '^ms-settings:[a-z0-9\-]{0,64}$' -and $uri -cne 'ms-settings-connectabledevices:devicediscovery') { throw 'Blocked URI' }
       Start-Process $uri; return $null
     }
     default { throw "Unknown command: $cmd" }

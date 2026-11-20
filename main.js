@@ -95,6 +95,46 @@ function setStyle(style) {
 // ------------------------------------------------------------------ calendar (ICS link)
 let calState = { configured: false, ok: false, error: null, events: [], updated: 0 };
 let calTimer = null;
+let icsText = '';            // last downloaded calendar, kept in memory only (for the month view)
+let icsOk = false, icsError = null;
+
+// ---- your own events and marked days (stored on this PC, next to settings.json)
+const LOCAL_MAX_EVENTS = 1000, LOCAL_MAX_MARKS = 1000;
+const localCalFile = () => path.join(app.getPath('userData'), 'calendar-local.json');
+let localCal = { events: [], marks: [] };
+function loadLocalCal() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(localCalFile(), 'utf8'));
+    localCal.events = (Array.isArray(raw.events) ? raw.events : []).filter(validLocalEvent).slice(0, LOCAL_MAX_EVENTS);
+    localCal.marks = (Array.isArray(raw.marks) ? raw.marks : []).filter(isDayKey).slice(0, LOCAL_MAX_MARKS);
+  } catch { localCal = { events: [], marks: [] }; }
+}
+function saveLocalCal() {
+  try { fs.writeFileSync(localCalFile(), JSON.stringify(localCal)); } catch {}
+}
+const isDayKey = (v) => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(v);
+const MIN_T = Date.UTC(2000, 0, 1), MAX_T = Date.UTC(2100, 0, 1);
+function validLocalEvent(e) {
+  return e && typeof e === 'object' && typeof e.id === 'string' && /^[a-f0-9-]{36}$/.test(e.id) &&
+    typeof e.title === 'string' && e.title.trim().length > 0 && e.title.length <= 80 &&
+    Number.isFinite(e.start) && Number.isFinite(e.end) && e.start >= MIN_T && e.end <= MAX_T &&
+    e.end >= e.start && e.end - e.start <= 14 * 86400e3 && typeof e.allDay === 'boolean';
+}
+const localOut = (e) => ({ id: 'local:' + e.id, title: e.title, start: e.start, end: e.end, url: null, allDay: e.allDay, local: true });
+
+// Timed events for the countdown / agenda: calendar link + your own, in the next 36 h.
+function rebuildCalState() {
+  const now = Date.now(), from = now - 12 * 3600e3, to = now + 36 * 3600e3;
+  let events = [];
+  if (settings.calendarUrl && icsOk && icsText) { try { events = eventsBetween(icsText, from, to); } catch {} }
+  for (const e of localCal.events) if (!e.allDay && e.end > from && e.start < to) events.push(localOut(e));
+  events.sort((a, b) => a.start - b.start);
+  calState = {
+    configured: !!settings.calendarUrl, ok: settings.calendarUrl ? icsOk : true,
+    error: settings.calendarUrl ? icsError : null, events, hasLocal: localCal.events.length > 0, updated: now,
+  };
+  send('calendar', calState);
+}
 
 function normaliseCalUrl(u) {
   u = String(u || '').trim();
@@ -126,7 +166,7 @@ async function refreshCalendar() {
   clearTimeout(calTimer);
   calTimer = setTimeout(refreshCalendar, 5 * 60 * 1000);
   if (!settings.calendarUrl) {
-    calState = { configured: false, ok: false, error: null, events: [], updated: Date.now() };
+    icsText = ''; icsOk = false; icsError = null;
   } else {
     try {
       const ctrl = new AbortController();
@@ -141,14 +181,13 @@ async function refreshCalendar() {
         text = await readCapped(res, MAX_ICS_BYTES);
       } finally { clearTimeout(killer); }
       if (!text.includes('BEGIN:VCALENDAR')) throw new Error('Not a calendar (.ics) link');
-      const now = Date.now();
-      const events = eventsBetween(text, now - 12 * 3600e3, now + 36 * 3600e3);
-      calState = { configured: true, ok: true, error: null, events, updated: now };
+      icsText = text; icsOk = true; icsError = null;
     } catch (e) {
-      calState = { ...calState, configured: true, ok: false, error: String(e.message || e), updated: Date.now() };
+      icsOk = !!icsText; icsError = String(e.message || e);   // keep the last good copy if a refresh fails
+      if (!icsText) icsOk = false;
     }
   }
-  send('calendar', calState);
+  rebuildCalState();
 }
 
 // ------------------------------------------------------------------ PowerShell bridge
@@ -173,7 +212,8 @@ function buildNativeEngine() {
       fs.mkdirSync(dir, { recursive: true });
       const exe = path.join(dir, 'NothingIslandEngine.exe');
       const stampFile = path.join(dir, 'build.json');
-      const srcHash = sha256(fs.readFileSync(src));
+      const devSrc = path.join(__dirname, 'devices.cs').replace('app.asar', 'app.asar.unpacked');
+      const srcHash = sha256(Buffer.concat([fs.readFileSync(src), fs.readFileSync(devSrc)]));
       try {
         const stamp = JSON.parse(fs.readFileSync(stampFile, 'utf8'));
         // reuse the build only if the source is unchanged AND the exe is byte-for-byte what we built
@@ -188,7 +228,7 @@ function buildNativeEngine() {
         path.join('WPF', 'UIAutomationClient.dll'), path.join('WPF', 'UIAutomationTypes.dll'), path.join('WPF', 'WindowsBase.dll')]
         .map((r) => '/r:' + path.join(fw, r));
       const args = ['/nologo', '/noconfig', '/target:exe', '/platform:anycpu', '/optimize+', '/warn:0',
-        '/r:' + path.join(fw, 'System.dll'), ...refs, '/out:' + exe, src];
+        '/r:' + path.join(fw, 'System.dll'), ...refs, '/out:' + exe, src, devSrc];
       execFile(csc, args, { windowsHide: true, timeout: 90000 }, (err, stdout, stderr) => {
         if (err || !fs.existsSync(exe)) {
           try { fs.writeFileSync(path.join(dir, 'build-error.log'), String(stdout || '') + String(stderr || '') + String(err || '')); } catch {}
@@ -452,12 +492,26 @@ const SYS_ALLOWED = {
   setRadio: (a) => a && typeof a === 'object' && ['WiFi', 'Bluetooth'].includes(a.kind) && ['On', 'Off'].includes(a.state),
   lock: (a) => a == null,
   snip: (a) => a == null,
-  open: (a) => typeof a === 'string' && /^ms-settings:[a-z0-9-]{0,64}$/.test(a),
+  open: (a) => typeof a === 'string' && (/^ms-settings:[a-z0-9-]{0,64}$/.test(a) || a === 'ms-settings-connectabledevices:devicediscovery'),
+  // pickers
+  wifiList: (a) => a == null,
+  wifiScan: (a) => a == null,
+  wifiDisconnect: (a) => a == null,
+  wifiConnect: (a) => a && typeof a === 'object' && isSsid(a.ssid) &&
+    (a.password == null || (typeof a.password === 'string' && a.password.length >= 8 && a.password.length <= 64 && /^[\x20-\x7e]+$/.test(a.password))),
+  wifiForget: (a) => isSsid(a),
+  audioOutputs: (a) => a == null,
+  setAudioOutput: (a) => typeof a === 'string' && a.length <= 200 && /^\{0\.0\.0\.00000000\}\.\{[0-9a-fA-F-]{36}\}$/.test(a),
+  btList: (a) => a == null,
 };
+function isSsid(v) {
+  return typeof v === 'string' && v.length > 0 && Buffer.byteLength(v, 'utf8') <= 32 && !/[\x00-\x1f\x7f]/.test(v);
+}
 handleTrusted('sys', (cmd, arg) => {
   if (typeof cmd !== 'string' || !Object.prototype.hasOwnProperty.call(SYS_ALLOWED, cmd)) return { ok: false, error: 'unknown command' };
   if (!SYS_ALLOWED[cmd](arg)) return { ok: false, error: 'invalid argument' };
   if (cmd === 'setRadio') arg = { kind: arg.kind, state: arg.state };   // drop any extra fields
+  if (cmd === 'wifiConnect') arg = { ssid: arg.ssid, password: arg.password == null ? null : arg.password };
   return callBridge(cmd, arg === undefined ? null : arg);
 });
 // ---- click-through handling
@@ -503,11 +557,53 @@ onTrusted('set-style', (style) => setStyle(style));
 onTrusted('set-autohide', (on) => { settings.autoHide = !!on; saveSettings(); applyVisibility(); sendPrefs(); });
 handleTrusted('set-calendar', async (url) => {
   try { settings.calendarUrl = normaliseCalUrl(url); } catch (e) { return { ok: false, error: e.message }; }
+  icsText = ''; icsOk = false; icsError = null;      // never show the previous link's events
   saveSettings();
   await refreshCalendar();
   return { ok: calState.ok || !settings.calendarUrl, error: calState.error };
 });
 onTrusted('refresh-calendar', () => refreshCalendar());
+// ---- month view: everything between two times (at most ~6 weeks), plus your marked days
+handleTrusted('cal-range', (from, to) => {
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from < MIN_T || to > MAX_T || to <= from || to - from > 45 * 86400e3) {
+    return { ok: false, error: 'invalid range' };
+  }
+  let events = [];
+  if (settings.calendarUrl && icsText) { try { events = eventsBetween(icsText, from, to, { allDay: true }); } catch {} }
+  for (const e of localCal.events) if (e.end >= from && e.start < to) events.push(localOut(e));
+  events.sort((a, b) => a.start - b.start);
+  return { ok: true, events: events.slice(0, 1500), marks: localCal.marks.slice(), linked: !!settings.calendarUrl };
+});
+handleTrusted('cal-add', (ev) => {
+  if (!ev || typeof ev !== 'object') return { ok: false, error: 'invalid event' };
+  const title = String(ev.title == null ? '' : ev.title).replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, 80);
+  const e = { id: crypto.randomUUID(), title, start: ev.start, end: ev.end, allDay: !!ev.allDay };
+  if (!validLocalEvent(e)) return { ok: false, error: title ? 'Check the date and time' : 'Give the event a name' };
+  if (localCal.events.length >= LOCAL_MAX_EVENTS) return { ok: false, error: 'Too many events — remove some first' };
+  localCal.events.push(e);
+  saveLocalCal();
+  rebuildCalState();
+  return { ok: true };
+});
+handleTrusted('cal-remove', (id) => {
+  if (typeof id !== 'string' || !/^local:[a-f0-9-]{36}$/.test(id)) return { ok: false, error: 'Only your own events can be removed here' };
+  const before = localCal.events.length;
+  localCal.events = localCal.events.filter((e) => 'local:' + e.id !== id);
+  if (localCal.events.length === before) return { ok: false, error: 'not found' };
+  saveLocalCal();
+  rebuildCalState();
+  return { ok: true };
+});
+handleTrusted('cal-mark', (day, on) => {
+  if (!isDayKey(day) || typeof on !== 'boolean') return { ok: false, error: 'invalid day' };
+  const has = localCal.marks.includes(day);
+  if (on && !has) {
+    if (localCal.marks.length >= LOCAL_MAX_MARKS) return { ok: false, error: 'Too many marked days' };
+    localCal.marks.push(day);
+  } else if (!on && has) localCal.marks = localCal.marks.filter((d) => d !== day);
+  saveLocalCal();
+  return { ok: true, marks: localCal.marks.slice() };
+});
 // Only open a link that belongs to one of your calendar events and points to a known meeting service.
 const MEETING_HOSTS = /(^|\.)(meet\.google\.com|zoom\.us|teams\.microsoft\.com|teams\.live\.com|webex\.com|whereby\.com|meet\.jit\.si)$/i;
 onTrusted('open-url', (url) => {
@@ -603,6 +699,7 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
   loadSettings();
+  loadLocalCal();
   startBridge();
   createWindow();
   refreshCalendar();
