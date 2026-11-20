@@ -108,7 +108,11 @@
 
   function expand(focus) {
     if (S.alarm) return;
+    const was = S.expanded;
     S.expanded = true;
+    if (!was && !panel.classList.contains('show-sub') && !panel.classList.contains('show-settings')) {
+      requestAnimationFrame(() => staggerIn(panel.querySelector('.grid').children, 18));
+    }
     renderAll();
     layout();
     syncInteractive(!!focus);
@@ -117,7 +121,7 @@
   function collapse() {
     S.expanded = false;
     if (panel.classList.contains('show-settings')) setTimeout(() => toggleSettings(false), 400);
-    if (panel.classList.contains('show-sub')) setTimeout(() => { if (!S.expanded) closeSub(); }, 400);
+    if (panel.classList.contains('show-sub')) setTimeout(() => { if (!S.expanded) closeSub(true); }, 400);
     if (document.activeElement && panel.contains(document.activeElement)) document.activeElement.blur();
     layout();
   }
@@ -953,41 +957,95 @@
 
   function toggleSettings(force) {
     const show = force === undefined ? !panel.classList.contains('show-settings') : force;
-    if (show) closeSub();
+    if (show === panel.classList.contains('show-settings') && !panel.classList.contains('show-sub')) return;
+    if (show) { sub.view = null; sub.token++; clearTimeout(sub.timer); }
     if (show) $('settingsView').style.minHeight = panel.querySelector('.grid').offsetHeight + 'px';
-    panel.classList.toggle('show-settings', show);
     renderCalStatus();
-    layout();
-    if (show) setTimeout(() => $('calInput').focus(), 300);
+    viewSwap(() => {
+      if (show) panel.classList.remove('show-sub');
+      panel.classList.toggle('show-settings', show);
+    }, show ? 1 : -1);
+    if (show) setTimeout(() => $('calInput').focus(), 450);
   }
 
   // ---------------------------------------------------------------- pickers: Wi-Fi / Bluetooth / output / calendar
   // One sub-view inside the panel. Each picker renders its own body; the island keeps its size
   // (min-height = the grid) so it doesn't jump around while lists load.
-  const sub = { view: null, token: 0 };
+  const sub = { view: null, token: 0, fresh: false };
+
+  // ---- motion (One UI-style): the old view sinks back and blurs out, the new one glides in on a
+  // soft spring, then its rows rise in one after another. Skipped when Windows asks for less motion.
+  const REDUCE = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const SPRING = 'cubic-bezier(.22, 1.18, .36, 1)';
+  const currentView = () => panel.classList.contains('show-sub') ? $('subView')
+    : panel.classList.contains('show-settings') ? $('settingsView') : panel.querySelector('.grid');
+  let swapSeq = 0;
+  function viewSwap(apply, dir) {
+    const seq = ++swapSeq;
+    if (REDUCE || !S.expanded) { apply(); afterSwap(); return; }
+    const from = currentView();
+    from.getAnimations().forEach((a) => a.cancel());
+    const out = from.animate([
+      { opacity: 1, transform: 'none', filter: 'blur(0)' },
+      { opacity: 0, transform: `translateX(${-18 * dir}px) scale(.965)`, filter: 'blur(4px)' },
+    ], { duration: 140, easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards' });
+    out.onfinish = () => {
+      out.cancel();
+      if (seq !== swapSeq) return;
+      apply();
+      const to = currentView();
+      to.animate([
+        { opacity: 0, transform: `translateX(${28 * dir}px) scale(.975)`, filter: 'blur(4px)' },
+        { opacity: 1, transform: 'none', filter: 'blur(0)' },
+      ], { duration: 520, easing: SPRING });
+      if (to.classList.contains('grid')) staggerIn(to.children, 16);
+      afterSwap();
+    };
+  }
+  function afterSwap() { layout(); if (panel.classList.contains('show-sub')) enter(); }
+  function staggerIn(els, step = 22, rowOf = (i) => i) {
+    if (REDUCE) return;
+    [...els].forEach((el, i) => el.animate([
+      { opacity: 0, transform: 'translateY(12px) scale(.97)' },
+      { opacity: 1, transform: 'none' },
+    ], { duration: 520, delay: Math.min(rowOf(i), 12) * step, easing: SPRING, fill: 'backwards' }));
+  }
+  // first real content of a freshly opened picker rises in (later refreshes don't re-animate)
+  function enter() {
+    const body = $('subBody');
+    if (!sub.fresh || !panel.classList.contains('show-sub') || body.querySelector('.sv-loading')) return;
+    sub.fresh = false;
+    staggerIn(body.querySelectorAll('.sv-row, .sv-empty, .sv-note, .sv-foot .set-btn, .dayp'), 28);
+    staggerIn(body.querySelectorAll('.mgrid > *'), 22, (i) => Math.floor(i / 7));
+  }
   const svIcon = (id) => `<svg><use href="#${id}"/></svg>`;
   const ROW_ICON = { audio: 'i-headphones', keyboard: 'i-keyboard', mouse: 'i-mouse', phone: 'i-phone', gamepad: 'i-pad', watch: 'i-dev', device: 'i-dev' };
 
   function openSub(view) {
-    if (panel.classList.contains('show-settings')) toggleSettings(false);
+    const switching = panel.classList.contains('show-sub');
     $('subView').style.minHeight = '250px';     // lists size the island; this just avoids a jump while loading
     sub.view = view;
     sub.token++;
-    panel.classList.add('show-sub');
-    $('subActs').innerHTML = '';
-    $('subBody').innerHTML = '<div class="sv-list"><div class="sv-empty">LOADING…</div></div>';
-    ({ wifi: wifiView, bt: btView, audio: audioView, cal: calView })[view]();
-    layout();
+    sub.fresh = true;
+    clearTimeout(sub.timer);
+    const show = () => {
+      panel.classList.remove('show-settings');
+      $('subActs').innerHTML = '';
+      $('subBody').innerHTML = '<div class="sv-list"><div class="sv-empty sv-loading">LOADING…</div></div>';
+      panel.classList.add('show-sub');
+      ({ wifi: wifiView, bt: btView, audio: audioView, cal: calView })[view]();
+    };
+    if (switching) { show(); layout(); } else viewSwap(show, 1);
   }
-  function closeSub() {
+  function closeSub(instant) {
     if (!panel.classList.contains('show-sub')) return;
     sub.view = null;
     sub.token++;
     clearTimeout(sub.timer);
-    panel.classList.remove('show-sub');
-    layout();
+    const hide = () => panel.classList.remove('show-sub');
+    if (instant) { hide(); layout(); } else viewSwap(hide, -1);
   }
-  $('subBack').addEventListener('click', closeSub);
+  $('subBack').addEventListener('click', () => closeSub());
   const setTitle = (txt) => { $('subTitle').innerHTML = `<span class="label" style="color:var(--white)">${esc(txt)}</span>`; };
   const relayout = () => requestAnimationFrame(layout);
   // typing in a picker: keep the island open even if the mouse wanders off
@@ -1038,7 +1096,7 @@
     if (S.radios.wifi !== 'On') {
       $('subBody').innerHTML = `<div class="sv-list"><div class="sv-empty">Wi-Fi is off.<br/><button class="set-btn" id="wOn">TURN ON</button></div></div>` + footButtons(foot);
       $('wOn').addEventListener('click', () => acts.querySelector('.switch').click());
-      bindFoot(foot); relayout(); return;
+      bindFoot(foot); relayout(); enter(); return;
     }
     if (rescan) { api.sys('wifiScan'); }
     await wifiLoad(tk);
@@ -1054,7 +1112,7 @@
         ? 'Windows only shows nearby Wi-Fi networks to apps that have <b style="color:#fff">location access</b>.<br/>Turn on “Let desktop apps access your location”, then come back.<br/><button class="set-btn" id="wLoc">OPEN LOCATION SETTINGS</button>'
         : 'Couldn’t read Wi-Fi networks: ' + esc(r.error || 'unknown error')}</div></div>` + footButtons(foot);
       if (loc) $('wLoc').addEventListener('click', () => openWin('ms-settings:privacy-location'));
-      bindFoot(foot); relayout(); return;
+      bindFoot(foot); relayout(); enter(); return;
     }
     wifiUi.nets = r.data.networks || [];
     renderWifi();
@@ -1109,6 +1167,7 @@
       }
     });
     relayout();
+    enter();
   }
   function wifiMsg(ssid, text, err) { if (text) wifiUi.msg[ssid] = { text, err }; else delete wifiUi.msg[ssid]; }
   async function wifiJoin(n, password) {
@@ -1169,7 +1228,7 @@
     if (S.radios.bluetooth !== 'On') {
       $('subBody').innerHTML = `<div class="sv-list"><div class="sv-empty">Bluetooth is off.<br/><button class="set-btn" id="bOn">TURN ON</button></div></div>` + footButtons(foot);
       $('bOn').addEventListener('click', () => acts.querySelector('.switch').click());
-      bindFoot(foot); relayout(); return;
+      bindFoot(foot); relayout(); enter(); return;
     }
     const r = await api.sys('btList');
     if (sub.token !== tk) return;
@@ -1182,6 +1241,7 @@
     bindFoot(foot);
     $('subBody').querySelectorAll('[data-d]').forEach((b) => b.addEventListener('click', () => openWin('ms-settings:bluetooth')));
     relayout();
+    enter();
     clearTimeout(sub.timer);
     sub.timer = setTimeout(() => { if (sub.token === tk) btView(); }, 8000);   // keep status fresh while open
   }
@@ -1217,6 +1277,7 @@
       fastPoll();
     }));
     relayout();
+    enter();
   }
 
   // ---- Calendar (month view + your own events + marked days)
@@ -1229,11 +1290,11 @@
     if (!cal.month) cal.month = new Date(now.getFullYear(), now.getMonth(), 1);
     if (!cal.sel) cal.sel = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const acts = $('subActs'); acts.innerHTML = '';
-    const nav = (d) => () => { cal.month = new Date(cal.month.getFullYear(), cal.month.getMonth() + d, 1); calLoad(); };
+    const nav = (d) => () => { cal.dir = d; cal.month = new Date(cal.month.getFullYear(), cal.month.getMonth() + d, 1); calLoad(); };
     const prev = document.createElement('button'); prev.className = 'cal-nav'; prev.title = 'Previous month'; prev.innerHTML = svIcon('i-back'); prev.onclick = nav(-1);
     const next = document.createElement('button'); next.className = 'cal-nav'; next.title = 'Next month'; next.innerHTML = svIcon('i-chev'); next.onclick = nav(1);
     const today = document.createElement('button'); today.className = 'cal-today'; today.textContent = 'TODAY';
-    today.onclick = () => { const n = new Date(); cal.month = new Date(n.getFullYear(), n.getMonth(), 1); cal.sel = new Date(n.getFullYear(), n.getMonth(), n.getDate()); calLoad(); };
+    today.onclick = () => { const n = new Date(); cal.dir = Math.sign(new Date(n.getFullYear(), n.getMonth(), 1) - cal.month); cal.month = new Date(n.getFullYear(), n.getMonth(), 1); cal.sel = new Date(n.getFullYear(), n.getMonth(), n.getDate()); calLoad(); };
     acts.append(today, prev, next);
     calLoad();
   }
@@ -1287,8 +1348,8 @@
     const body = $('subBody');
     body.querySelectorAll('.mday').forEach((b) => b.addEventListener('click', () => {
       const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + +b.dataset.k);
-      cal.sel = d;
-      if (d.getMonth() !== m.getMonth()) { cal.month = new Date(d.getFullYear(), d.getMonth(), 1); calLoad(); } else renderCal();
+      cal.sel = d; cal.pick = true;
+      if (d.getMonth() !== m.getMonth()) { cal.dir = d < m ? -1 : 1; cal.month = new Date(d.getFullYear(), d.getMonth(), 1); calLoad(); } else renderCal();
     }));
     body.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', async () => {
       const ev = list[+b.dataset.rm];
@@ -1323,6 +1384,18 @@
     $('calAdd').addEventListener('click', add);
     [$('calTtl'), time, dur].forEach((el) => el.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') add(); if (e.key === 'Escape') el.blur(); }));
     relayout();
+    if (cal.dir && !REDUCE) {
+      const k = [{ opacity: 0, transform: `translateX(${36 * cal.dir}px)`, filter: 'blur(3px)' }, { opacity: 1, transform: 'none', filter: 'blur(0)' }];
+      body.querySelector('.mgrid').animate(k, { duration: 460, easing: SPRING });
+      $('subTitle').animate(k, { duration: 460, easing: SPRING });
+    }
+    if (cal.pick && !REDUCE) {
+      body.querySelector('.dayp-list').animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: SPRING });
+      const selEl = body.querySelector('.mday.sel');
+      if (selEl) selEl.animate([{ transform: 'scale(.82)' }, { transform: 'none' }], { duration: 420, easing: SPRING });
+    }
+    cal.dir = 0; cal.pick = false;
+    enter();
   }
 
   // entry points

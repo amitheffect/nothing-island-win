@@ -500,3 +500,18 @@ body.notch #panel { padding-top: 18px; }
 .addf .add svg { width: 15px; height: 15px; }
 .addf .add:active { transform: scale(.92); }
 .addf-msg { font-family: var(--mono); font-size: 9px; letter-spacing: .06em; color: var(--red); min-height: 0; }
+
+/* ------------------------------------------------------------ motion polish */
+.sv-row, .mday, .sub-back, .sub-ic, .cal-nav, .cal-today, .mark-btn, .set-btn, .de .rm {
+  transition: background .2s var(--ease), color .2s var(--ease), transform .35s cubic-bezier(.22, 1.18, .36, 1);
+}
+.sv-row:active, .mday:active { transform: scale(.96); }
+.sub-back:active, .sub-ic:active, .cal-nav:active, .cal-today:active, .mark-btn:active, .de .rm:active { transform: scale(.88); }
+.sv-form, .sv-acts { animation: svDrop .42s cubic-bezier(.22, 1.18, .36, 1) both; }
+@keyframes svDrop { from { opacity: 0; transform: translateY(-8px) scale(.98); } }
+.mark-btn i { transition: background .25s var(--ease), transform .35s cubic-bezier(.22, 1.18, .36, 1); }
+.mark-btn.on i { transform: scale(1.25); }
+@media (prefers-reduced-motion: reduce) {
+  .sv-form, .sv-acts { animation: none; }
+  .sv-row, .mday { transition: none; }
+}
