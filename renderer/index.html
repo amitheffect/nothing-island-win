@@ -85,6 +85,16 @@
       <span class="n-dot" id="nDot"></span>
     </div>
 
+    <!-- screen-time break reminder -->
+    <div id="stime" class="layer">
+      <div class="st-ring" id="stRing"></div>
+      <div class="st-body">
+        <div class="label">SCREEN TIME</div>
+        <div class="st-title" id="stTitle"></div>
+        <div class="st-sub" id="stSub"></div>
+      </div>
+    </div>
+
     <!-- timer finished -->
     <div id="alarm" class="layer">
       <div id="alarmText"></div>
@@ -228,6 +238,13 @@
           <span><span class="label">HIDE OVER FULLSCREEN</span><span class="set-help">Games, F11 browsers, fullscreen video. Never over Premiere, After Effects, Photoshop…</span></span>
           <span class="switch"><i></i></span>
         </button>
+        <div class="set-block">
+          <span class="label">SCREEN-TIME BREAK REMINDER</span>
+          <div class="seg" id="screenSeg">
+            <button data-n="0">OFF</button><button data-n="1">1 H</button><button data-n="2">2 H</button><button data-n="3">3 H</button>
+          </div>
+          <div class="set-status" id="screenToday">TODAY: —</div>
+        </div>
         <button class="set-btn wide" id="winSettings">OPEN WINDOWS SETTINGS</button>
       </div>
 

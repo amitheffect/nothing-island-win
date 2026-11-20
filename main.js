@@ -1,5 +1,5 @@
 // Nothing Island — main process
-const { app, BrowserWindow, ipcMain, screen, globalShortcut, Tray, Menu, nativeImage, net, shell, safeStorage, session, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, globalShortcut, Tray, Menu, nativeImage, net, shell, safeStorage, session, clipboard, powerMonitor } = require('electron');
 const { eventsBetween } = require('./calendar');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
@@ -16,7 +16,7 @@ let tray = null;
 let bridge = null;
 let quitting = false;
 let bridgeInfo = null;
-let settings = { style: 'island', calendarUrl: '', autoHide: true, lowMemory: true, engine: 'native' };   // 'island' (floating) | 'notch' (docked to the top edge)
+let settings = { style: 'island', calendarUrl: '', autoHide: true, lowMemory: true, engine: 'native', screenEvery: 1 };   // 'island' (floating) | 'notch' (docked to the top edge)
 let userHidden = false;   // hidden from the tray menu
 let autoHidden = false;   // hidden because a fullscreen app is in front
 let seq = 0;
@@ -65,6 +65,7 @@ function loadSettings() {
   settings.autoHide = raw.autoHide !== false;
   settings.lowMemory = raw.lowMemory !== false;
   settings.engine = raw.engine === 'powershell' ? 'powershell' : 'native';
+  settings.screenEvery = [0, 1, 2, 3].includes(raw.screenEvery) ? raw.screenEvery : 1;
   settings.calendarUrl = '';
   try {
     if (typeof raw.calendarUrlEnc === 'string' && safeStorage.isEncryptionAvailable()) {
@@ -76,7 +77,7 @@ function loadSettings() {
   } catch { settings.calendarUrl = ''; }
 }
 function saveSettings() {
-  const out = { style: settings.style, autoHide: settings.autoHide, lowMemory: settings.lowMemory, engine: settings.engine };
+  const out = { style: settings.style, autoHide: settings.autoHide, lowMemory: settings.lowMemory, engine: settings.engine, screenEvery: settings.screenEvery };
   if (settings.calendarUrl) {
     if (safeStorage.isEncryptionAvailable()) out.calendarUrlEnc = safeStorage.encryptString(settings.calendarUrl).toString('base64');
     else return; // never write the secret link in plain text; it just won't survive a restart
@@ -84,7 +85,52 @@ function saveSettings() {
   try { fs.writeFileSync(settingsFile(), JSON.stringify(out, null, 2), { mode: 0o600 }); } catch {}
 }
 function sendPrefs() {
-  send('prefs', { autoHide: settings.autoHide });
+  send('prefs', { autoHide: settings.autoHide, screenEvery: settings.screenEvery, software: LOW_MEMORY, screenSecs: screen_.secs });
+}
+
+// ------------------------------------------------------------------ screen time
+// Counts time you're actually at the PC today (not locked, asleep or idle for 5+ minutes) and
+// asks the island to show a short break reminder every 1 / 2 / 3 hours. Stays on this PC.
+const SCREEN_TICK = 30;
+const screenFile = () => path.join(app.getPath('userData'), 'screen-time.json');
+const dayKeyNow = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+let screen_ = { day: '', secs: 0, shown: 0 }, screenLocked = false, screenTimer = null, screenSaved = 0;
+function loadScreenTime() {
+  try {
+    const r = JSON.parse(fs.readFileSync(screenFile(), 'utf8'));
+    if (r && r.day === dayKeyNow() && Number.isFinite(r.secs) && Number.isFinite(r.shown)) {
+      screen_ = { day: r.day, secs: Math.max(0, Math.min(r.secs, 86400)), shown: Math.max(0, Math.min(r.shown, 24)) };
+      return;
+    }
+  } catch {}
+  screen_ = { day: dayKeyNow(), secs: 0, shown: 0 };
+}
+function saveScreenTime() { try { fs.writeFileSync(screenFile(), JSON.stringify(screen_)); } catch {} screenSaved = Date.now(); }
+function screenTick() {
+  if (quitting) return;
+  if (screen_.day !== dayKeyNow()) screen_ = { day: dayKeyNow(), secs: 0, shown: 0 };
+  let idle = 0;
+  try { idle = powerMonitor.getSystemIdleTime(); } catch {}
+  if (!screenLocked && idle < 300) screen_.secs += SCREEN_TICK;
+  const hours = Math.floor(screen_.secs / 3600);
+  const every = settings.screenEvery;
+  if (every && hours >= screen_.shown + every) {
+    screen_.shown = hours - (hours % every);
+    send('screen-time', { hours, secs: screen_.secs, every });
+    saveScreenTime();
+  }
+  send('screen-secs', screen_.secs);
+  if (Date.now() - screenSaved > 5 * 60e3) saveScreenTime();
+}
+function startScreenTime() {
+  loadScreenTime();
+  try {
+    powerMonitor.on('lock-screen', () => { screenLocked = true; });
+    powerMonitor.on('unlock-screen', () => { screenLocked = false; });
+    powerMonitor.on('suspend', () => { screenLocked = true; saveScreenTime(); });
+    powerMonitor.on('resume', () => { screenLocked = false; });
+  } catch {}
+  screenTimer = setInterval(screenTick, SCREEN_TICK * 1000);
 }
 function setStyle(style) {
   settings.style = style === 'notch' ? 'notch' : 'island';
@@ -554,6 +600,13 @@ onTrusted('hit-rect', (r) => {
   hitRect = { x: r.x, y: r.y, w: r.w, h: r.h };
 });
 onTrusted('set-style', (style) => setStyle(style));
+onTrusted('set-screen-every', (n) => {
+  if (![0, 1, 2, 3].includes(n)) return;
+  settings.screenEvery = n;
+  const hours = Math.floor(screen_.secs / 3600);
+  screen_.shown = n ? hours - (hours % n) : hours;   // next reminder at the next multiple, never right away
+  saveSettings(); saveScreenTime(); sendPrefs();
+});
 onTrusted('set-autohide', (on) => { settings.autoHide = !!on; saveSettings(); applyVisibility(); sendPrefs(); });
 handleTrusted('set-calendar', async (url) => {
   try { settings.calendarUrl = normaliseCalUrl(url); } catch (e) { return { ok: false, error: e.message }; }
@@ -700,6 +753,7 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler(() => false);
   loadSettings();
   loadLocalCal();
+  startScreenTime();
   startBridge();
   createWindow();
   refreshCalendar();
@@ -722,6 +776,8 @@ app.on('before-quit', () => {
   clearInterval(cursorTimer);
   clearInterval(trimTimer);
   clearInterval(notifTimer);
+  clearInterval(screenTimer);
+  if (screen_.day) saveScreenTime();
   try { if (notifDb) notifDb.close(); } catch {}
   clearTimeout(calTimer);
   globalShortcut.unregisterAll();

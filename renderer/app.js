@@ -24,6 +24,7 @@
     timer: { total: 300, remaining: 300, running: false, endAt: 0 },
     notifQueue: [], notif: null, notifUntil: 0,
     chargeUntil: 0, chargePlugged: false,
+    screenUntil: 0, screenPending: null, screenSecs: 0, screenEvery: 1, software: false,
     fullscreen: false, autoHidden: false,
     style: 'island',
     notifSource: 'popup',
@@ -43,6 +44,7 @@
     charge: { w: 300, h: 40, r: 20 },
     notif:  { w: 360, h: 62, r: 31 },
     alarm:  { w: 330, h: 64, r: 32 },
+    screen: { w: 400, h: 80, r: 40 },
   };
 
   const island = $('island');
@@ -55,6 +57,7 @@
     if (S.alarm) return 'alarm';
     if (S.expanded) return 'expanded';
     if (S.notif && Date.now() < S.notifUntil) return 'notif';
+    if (Date.now() < S.screenUntil) return 'screen';
     if (Date.now() < S.chargeUntil) return 'charge';
     if (Date.now() < S.hudUntil) return 'hud';
     if (S.timer.running) return 'timer';
@@ -120,6 +123,8 @@
   }
   function collapse() {
     S.expanded = false;
+    setTimeout(repaint, 600);
+    setTimeout(flushScreen, 700);
     if (panel.classList.contains('show-settings')) setTimeout(() => toggleSettings(false), 400);
     if (panel.classList.contains('show-sub')) setTimeout(() => { if (!S.expanded) closeSub(true); }, 400);
     if (document.activeElement && panel.contains(document.activeElement)) document.activeElement.blur();
@@ -333,6 +338,7 @@
     S.autoHidden = hide;
     if (hide) { S.expanded = false; S.notif = null; S.notifQueue.length = 0; layout(); }
     if (api.setAutoHide) api.setAutoHide(hide);
+    if (!hide) setTimeout(flushScreen, 1500);
   }
 
   // ---------------------------------------------------------------- media
@@ -961,6 +967,7 @@
     if (show) { sub.view = null; sub.token++; clearTimeout(sub.timer); }
     if (show) $('settingsView').style.minHeight = panel.querySelector('.grid').offsetHeight + 'px';
     renderCalStatus();
+    renderScreenPrefs();
     viewSwap(() => {
       if (show) panel.classList.remove('show-sub');
       panel.classList.toggle('show-settings', show);
@@ -985,9 +992,10 @@
     if (REDUCE || !S.expanded) { apply(); afterSwap(); return; }
     const from = currentView();
     from.getAnimations().forEach((a) => a.cancel());
+    const blur = S.software ? 'none' : 'blur(4px)';      // blur is costly (and glitchy) without the GPU
     const out = from.animate([
-      { opacity: 1, transform: 'none', filter: 'blur(0)' },
-      { opacity: 0, transform: `translateX(${-18 * dir}px) scale(.965)`, filter: 'blur(4px)' },
+      { opacity: 1, transform: 'none' },
+      { opacity: 0, transform: `translateX(${-18 * dir}px) scale(.965)`, filter: blur },
     ], { duration: 140, easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards' });
     out.onfinish = () => {
       out.cancel();
@@ -995,20 +1003,35 @@
       apply();
       const to = currentView();
       to.animate([
-        { opacity: 0, transform: `translateX(${28 * dir}px) scale(.975)`, filter: 'blur(4px)' },
-        { opacity: 1, transform: 'none', filter: 'blur(0)' },
-      ], { duration: 520, easing: SPRING });
+        { opacity: 0, transform: `translateX(${28 * dir}px) scale(.975)`, filter: blur },
+        { opacity: 1, transform: 'none', filter: 'none' },
+      ], { duration: 520, easing: SPRING }).finished.then(repaint, () => {});
       if (to.classList.contains('grid')) staggerIn(to.children, 16);
       afterSwap();
     };
   }
+  // Without the GPU (low-memory mode) Chromium sometimes leaves a stale patch on a transparent
+  // window after an animation — a button that never shows up. Nudging the island's layer once the
+  // motion has settled makes it redraw the whole thing.
+  let repaintT = null;
+  function repaint() {
+    clearTimeout(repaintT);
+    repaintT = setTimeout(() => {
+      island.style.transform = 'translateZ(0)';
+      requestAnimationFrame(() => requestAnimationFrame(() => { island.style.transform = ''; }));
+    }, 30);
+  }
   function afterSwap() { layout(); if (panel.classList.contains('show-sub')) enter(); }
   function staggerIn(els, step = 22, rowOf = (i) => i) {
     if (REDUCE) return;
-    [...els].forEach((el, i) => el.animate([
-      { opacity: 0, transform: 'translateY(12px) scale(.97)' },
-      { opacity: 1, transform: 'none' },
-    ], { duration: 520, delay: Math.min(rowOf(i), 12) * step, easing: SPRING, fill: 'backwards' }));
+    // only a start keyframe: each tile animates back to its own style, so a dimmed (N/A) tile
+    // fades to its dimmed look instead of flashing fully bright first
+    let last = null;
+    [...els].forEach((el, i) => {
+      last = el.animate([{ offset: 0, opacity: 0, transform: 'translateY(12px) scale(.97)' }],
+        { duration: 520, delay: Math.min(rowOf(i), 12) * step, easing: SPRING, fill: 'backwards' });
+    });
+    if (last) last.finished.then(repaint, () => {});
   }
   // first real content of a freshly opened picker rises in (later refreshes don't re-animate)
   function enter() {
@@ -1413,6 +1436,48 @@
   $('calDate').addEventListener('click', () => openSub('cal'));
   $('agenda').addEventListener('click', (e) => { if (!e.target.closest('button')) openSub('cal'); });
 
+  // ---------------------------------------------------------------- screen-time break reminder
+  const fmtDur = (secs) => { const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60); return h ? `${h}H ${String(m).padStart(2, '0')}M` : `${m}M`; };
+  const SCREEN_TIPS = [
+    'Blink, stretch, look far away for 20 s.',
+    'Stand up, drink water, rest your eyes.',
+    'Long session — step away for a bit.',
+  ];
+  function showScreen(d) {
+    // wait for a calm moment: not while the panel is open, a fullscreen app runs, or another peek shows
+    const busy = S.expanded || S.autoHidden || S.alarm || (S.notif && Date.now() < S.notifUntil) || Date.now() < S.chargeUntil;
+    if (busy) { S.screenPending = d; clearTimeout(showScreen.retry); showScreen.retry = setTimeout(flushScreen, 5000); return; }
+    S.screenPending = null;
+    const h = Math.max(1, d.hours | 0);
+    const n = 28, R = 27;
+    let dots = '';
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+      dots += `<circle class="on${i === n - 1 ? ' red' : ''}" cx="${(32 + R * Math.cos(a)).toFixed(2)}" cy="${(32 + R * Math.sin(a)).toFixed(2)}" r="2.1" style="animation-delay:${(0.12 + i * 0.035).toFixed(3)}s"/>`;
+    }
+    $('stRing').innerHTML = `<svg class="ring" viewBox="0 0 64 64">${dots}</svg><div class="num">${DM.text(h + 'H', { dot: 2.6, gap: 0.9, color: '#f0f0f0' })}</div>`;
+    $('stTitle').textContent = `${h} hour${h > 1 ? 's' : ''} on screen today`;
+    $('stSub').textContent = SCREEN_TIPS[Math.min(h, 3) - 1];
+    S.screenUntil = Date.now() + 7500;
+    layout();
+    clearTimeout(showScreen.t);
+    showScreen.t = setTimeout(() => { layout(); repaint(); }, 7550);
+  }
+  function flushScreen() { if (S.screenPending) showScreen(S.screenPending); }
+  $('stime').addEventListener('click', (e) => { e.stopPropagation(); S.screenUntil = 0; layout(); repaint(); });
+  if (api.onScreenTime) api.onScreenTime(showScreen);
+  function renderScreenPrefs() {
+    $('screenSeg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.n === S.screenEvery));
+    $('screenToday').textContent = 'TODAY: ' + fmtDur(S.screenSecs) + ' ON SCREEN' + (S.screenEvery ? ` · REMINDER EVERY ${S.screenEvery} H` : '');
+  }
+  $('screenSeg').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+    S.screenEvery = +b.dataset.n;
+    renderScreenPrefs();
+    if (api.setScreenEvery) api.setScreenEvery(S.screenEvery);
+  }));
+  if (api.onScreenSecs) api.onScreenSecs((secs) => { S.screenSecs = secs; if (panel.classList.contains('show-settings')) renderScreenPrefs(); });
+  window.__screen = (h) => showScreen({ hours: h, secs: h * 3600 });   // handy for testing from DevTools
+
   // ---------------------------------------------------------------- gestures on the collapsed pill
   // swipe left = next, swipe right = previous, hold = play/pause, click = open panel
   const pillEl = $('pill');
@@ -1488,6 +1553,10 @@
   if (api.onNotifs) api.onNotifs((list) => { if (!S.autoHidden && !S.expanded) pushNotifs(asList(list)); });
   function applyPrefs(p) {
     S.autoHidePref = p.autoHide !== false;
+    if ([0, 1, 2, 3].includes(p.screenEvery)) S.screenEvery = p.screenEvery;
+    if (Number.isFinite(p.screenSecs)) S.screenSecs = p.screenSecs;
+    S.software = !!p.software;
+    renderScreenPrefs();
     $('autoHideBtn').classList.toggle('on', S.autoHidePref);
     updateAutoHide();
   }
