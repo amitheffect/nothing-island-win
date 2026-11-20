@@ -78,7 +78,7 @@
       renderPill();
     }
     let size = SIZES[m];
-    if (m === 'expanded') size = { w: 460, h: panel.offsetHeight, r: 34 };
+    if (m === 'expanded') size = { w: 680, h: panel.offsetHeight, r: 32 };
     if (m === 'media') size = { w: PILL_MIN_W, h: 34, r: 17 };
     if (m === 'idle' || m === 'timer' || m === 'meet') {
       // fixed comfortable width; content is centred so the padding is always equal
@@ -588,7 +588,7 @@
   function renderTimer() {
     const tile = document.querySelector('.timer');
     tile.classList.toggle('running', T.running);
-    $('timerTime').innerHTML = DM.text(fmtTimer(T.remaining), { dot: 4, gap: 1.8, color: 'currentColor', ghost: 0.08 });
+    $('timerTime').innerHTML = DM.text(fmtTimer(T.remaining), { dot: 3.1, gap: 1.4, color: 'currentColor', ghost: 0.08 });
     $('goIco').setAttribute('href', T.running ? '#i-pause' : '#i-play');
     $('timerLabel').textContent = T.running ? 'RUNNING' : T.remaining < T.total ? 'PAUSED' : 'TIMER';
     document.querySelectorAll('#chips button').forEach((b) =>
@@ -713,8 +713,8 @@
     tile.classList.toggle('low', B.level <= 20 && !B.charging);
     tile.classList.toggle('charging', B.charging && !B.desktop);
     $('batLabel').textContent = B.desktop ? 'POWER' : B.charging ? 'CHARGING' : 'BATTERY';
-    $('batNum').innerHTML = B.desktop ? DM.text('AC', { dot: 4.4, color: '#f0f0f0' })
-      : DM.text(B.level + '%', { dot: B.level === 100 ? 3.2 : 3.8, color: B.level <= 20 && !B.charging ? '#d71921' : '#f0f0f0' });
+    $('batNum').innerHTML = B.desktop ? DM.text('AC', { dot: 2, color: '#f0f0f0' })
+      : DM.text(B.level + '%', { dot: 2, color: B.level <= 20 && !B.charging ? '#d71921' : '#f0f0f0' });
     const lit = Math.round(B.level / 10);
     $('batDots').innerHTML = Array.from({ length: 10 }, (_, i) => `<b class="${i < lit ? 'on' : ''}"></b>`).join('');
   }
@@ -893,7 +893,7 @@
     const d = new Date();
     $('cdDay').textContent = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
     $('cdMon').textContent = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() + ' ' + d.getFullYear();
-    $('cdNum').innerHTML = DM.text(String(d.getDate()), { dot: 4.2, gap: 1.4, color: '#111' });
+    $('cdNum').innerHTML = DM.text(String(d.getDate()), { dot: 3.3, gap: 1.2, color: '#111' });
     // week strip, Monday first
     const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
     $('week').innerHTML = Array.from({ length: 7 }, (_, i) => {
@@ -1030,6 +1030,7 @@
     [...els].forEach((el, i) => {
       last = el.animate([{ offset: 0, opacity: 0, transform: 'translateY(12px) scale(.97)' }],
         { duration: 520, delay: Math.min(rowOf(i), 12) * step, easing: SPRING, fill: 'backwards' });
+      last.finished.then(() => { el.style.transform = 'translateZ(0)'; requestAnimationFrame(() => { el.style.transform = ''; }); }, () => {});
     });
     if (last) last.finished.then(repaint, () => {});
   }
@@ -1360,14 +1361,14 @@
     const marked = marks.has(dayKey(sel));
     const nowH = new Date(); nowH.setMinutes(Math.ceil((nowH.getMinutes() + 1) / 15) * 15);
     const defT = `${String(nowH.getHours() % 24).padStart(2, '0')}:${String(nowH.getMinutes() % 60).padStart(2, '0')}`;
-    $('subBody').innerHTML = `<div class="mgrid">${cells}</div>` +
+    $('subBody').innerHTML = `<div class="cal-split"><div class="mgrid">${cells}</div>` +
       `<div class="dayp"><div class="dayp-head"><span class="dayp-title">${sel.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase()}</span>` +
       `<button class="mark-btn${marked ? ' on' : ''}" id="calMark" title="Mark this day"><i></i>${marked ? 'MARKED' : 'MARK DAY'}</button></div>` +
       `<div class="dayp-list">${items || `<div class="de-empty">${cal.data.linked ? 'Nothing on this day.' : 'Nothing yet — add something below.'}</div>`}</div>` +
       `<div class="addf"><input class="ttl" id="calTtl" maxlength="80" placeholder="Add event…" spellcheck="false"/>` +
       `<input type="time" id="calTime" value="${cal.lastTime || defT}"/>` +
       `<select id="calDur" title="Length"><option value="15">15 M</option><option value="30">30 M</option><option value="60" selected>1 H</option><option value="90">1.5 H</option><option value="120">2 H</option><option value="180">3 H</option><option value="all">ALL DAY</option></select>` +
-      `<button class="add" id="calAdd" title="Add">${svIcon('i-plus')}</button></div><div class="addf-msg" id="calMsg"></div></div>`;
+      `<button class="add" id="calAdd" title="Add">${svIcon('i-plus')}</button></div><div class="addf-msg" id="calMsg"></div></div></div>`;
     const body = $('subBody');
     body.querySelectorAll('.mday').forEach((b) => b.addEventListener('click', () => {
       const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + +b.dataset.k);

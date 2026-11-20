@@ -7,8 +7,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const readline = require('readline');
 
-const WIN_W = 520;
-const WIN_H = 560;
+const WIN_W = 740;
+const WIN_H = 500;
 const HOTKEY = 'CommandOrControl+Alt+Space';
 
 let win = null;

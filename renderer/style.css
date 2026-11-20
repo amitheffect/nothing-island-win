@@ -541,3 +541,79 @@ body.notch #panel { padding-top: 18px; }
 @media (prefers-reduced-motion: reduce) {
   .state-screen .st-ring svg.ring, .state-screen .st-body > * { animation: none; }
 }
+
+/* ------------------------------------------------------------ wide, low layout (v2) */
+#panel { width: 680px; padding: 12px 12px 8px; }
+.grid {
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: 96px 46px 46px 84px;
+  grid-template-areas:
+    "media media media timer timer clock"
+    "wifi  wifi  bt    bt    quad  quad"
+    "vol   vol   bri   bri   bat   bat"
+    "date  agenda agenda agenda agenda agenda";
+}
+.grid > #mediaTile { grid-area: media; }
+.grid > .timer { grid-area: timer; }
+.grid > .clock { grid-area: clock; justify-self: center; width: 96px; }
+.grid > #wifiBtn { grid-area: wifi; }
+.grid > #btBtn { grid-area: bt; }
+.grid > .quad { grid-area: quad; }
+.grid > #volSlider { grid-area: vol; }
+.grid > #briSlider { grid-area: bri; }
+.grid > #batTile { grid-area: bat; }
+.grid > #calDate { grid-area: date; }
+.grid > #agenda { grid-area: agenda; }
+
+.media { padding: 10px; }
+.art { width: 76px; height: 76px; }
+
+/* timer: digits + play on one line, presets underneath */
+.timer { padding: 8px 10px 8px 14px; gap: 2px; }
+.t-mid { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 1; min-height: 0; }
+.t-time { margin: 0; }
+.t-go { width: 32px; height: 32px; }
+.t-bottom { justify-content: flex-start; }
+.chips button { height: 20px; }
+
+/* toggles: a row of four inside its own tile */
+.quad { display: flex; align-items: center; justify-content: space-around; padding: 0 6px; gap: 0; }
+.quad .circ { width: 36px; height: 36px; background: var(--tile2); }
+.quad .circ:hover { background: #3a3a3c; }
+.quad .circ.on { background: var(--white); }
+.quad .circ.alert { background: var(--red); }
+.quad .circ svg { width: 16px; height: 16px; }
+
+/* power: one line */
+.battery { flex-direction: row; align-items: center; gap: 12px; padding: 0 16px; }
+.battery .label { width: 62px; flex: none; }
+.bat-num { margin: 0; flex: none; }
+.bat-dots { margin: 0; flex: 1; grid-template-columns: repeat(10, 1fr); gap: 4px; max-width: 120px; margin-left: auto; }
+
+.cal-date { gap: 4px; }
+.agenda { padding: 10px 16px; gap: 5px; }
+.pb-sub { max-width: 150px; }
+
+/* settings: two columns */
+#panel.show-settings .settings { display: grid; }
+.settings { grid-template-columns: 1fr 1fr; gap: 10px; padding: 2px 2px 0; }
+.settings .full { grid-column: 1 / -1; }
+.settings .tall { grid-row: span 2; }
+.settings .set-block { padding: 12px 14px; }
+
+/* sub views */
+.sv-list { max-height: 268px; }
+.cal-split { display: flex; gap: 10px; align-items: stretch; }
+.cal-split .mgrid { width: 352px; flex: none; align-content: start; }
+.cal-split .dayp { flex: 1; min-width: 0; }
+.cal-split .dayp-list { max-height: none; flex: 1; }
+.mday { height: 34px; }
+.addf { flex-wrap: wrap; }
+.addf .ttl { flex: 1 1 100%; }
+.addf input[type="time"] { flex: 1; }
+.bat-dots { display: flex; justify-content: flex-end; gap: 5px; max-width: none; }
+.bat-dots b { width: 7px; height: 7px; flex: none; aspect-ratio: auto; }
+.bat-left { display: flex; flex-direction: column; gap: 4px; flex: none; }
+.battery .label { width: auto; font-size: 8px; }
+.bat-dots { gap: 4px; }
+.bat-dots b { width: 7px; height: 7px; }

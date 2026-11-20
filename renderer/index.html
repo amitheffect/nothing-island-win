@@ -164,17 +164,19 @@
             <span class="label dark-label" id="timerLabel">TIMER</span>
             <button class="mini" id="timerReset" title="Reset"><svg><use href="#i-reset"/></svg></button>
           </div>
-          <div class="t-time" id="timerTime"></div>
+          <div class="t-mid">
+            <div class="t-time" id="timerTime"></div>
+            <button class="t-go" id="timerGo" title="Start / Pause"><svg><use id="goIco" href="#i-play"/></svg></button>
+          </div>
           <div class="t-bottom">
             <div class="chips" id="chips">
               <button data-min="1">1</button><button data-min="5">5</button><button data-min="10">10</button><button data-min="25">25</button>
             </div>
-            <button class="t-go" id="timerGo" title="Start / Pause"><svg><use id="goIco" href="#i-play"/></svg></button>
           </div>
         </section>
 
         <!-- small round toggles -->
-        <section class="quad">
+        <section class="tile dark quad">
           <button class="circ" id="micBtn" title="Microphone"><svg><use id="micIco" href="#i-mic"/></svg></button>
           <button class="circ" id="darkBtn" title="Dark mode"><svg><use href="#i-moon"/></svg></button>
           <button class="circ" id="snipBtn" title="Screenshot"><svg><use href="#i-snip"/></svg></button>
@@ -183,8 +185,7 @@
 
         <!-- battery -->
         <section class="tile dark battery" id="batTile">
-          <span class="label" id="batLabel">BATTERY</span>
-          <div class="bat-num" id="batNum"></div>
+          <div class="bat-left"><span class="label" id="batLabel">BATTERY</span><div class="bat-num" id="batNum"></div></div>
           <div class="bat-dots" id="batDots"></div>
         </section>
 
@@ -213,11 +214,11 @@
       </div>
       <!-- island settings (gear) -->
       <div class="settings" id="settingsView">
-        <div class="set-head">
+        <div class="set-head full">
           <span class="label">ISLAND SETTINGS</span>
           <button class="mini dark-mini" id="setClose" title="Back">&#x2715;</button>
         </div>
-        <div class="set-block">
+        <div class="set-block full">
           <span class="label">CALENDAR · SECRET ICS LINK</span>
           <div class="set-row">
             <input id="calInput" type="text" spellcheck="false" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" />
@@ -226,7 +227,7 @@
           <div class="set-help">Google Calendar → Settings → your calendar → <b>Secret address in iCal format</b>.<br/>Outlook → Settings → Calendar → Shared calendars → Publish → <b>ICS</b>.</div>
           <div class="set-status" id="calStatus">Not connected</div>
         </div>
-        <div class="set-block">
+        <div class="set-block tall">
           <span class="label">GESTURES ON THE PILL</span>
           <div class="set-gest">
             <span><b>Swipe ←</b> next track</span><span><b>Swipe →</b> previous</span>
@@ -245,7 +246,7 @@
           </div>
           <div class="set-status" id="screenToday">TODAY: —</div>
         </div>
-        <button class="set-btn wide" id="winSettings">OPEN WINDOWS SETTINGS</button>
+        <button class="set-btn wide full" id="winSettings">OPEN WINDOWS SETTINGS</button>
       </div>
 
       <div class="foot">
