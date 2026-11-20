@@ -436,6 +436,29 @@ namespace NI {
       return res.Take(3).ToList();
     }
 
+    // Diagnostics: every top-level window that might be a toast / notification surface, with its texts.
+    public static List<object> Dump() {
+      var outL = new List<object>();
+      try {
+        AutomationElementCollection wins = AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition);
+        var textCond = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text);
+        foreach (AutomationElement w in wins) {
+          string name, cls; int pid;
+          try { name = w.Current.Name ?? ""; cls = w.Current.ClassName ?? ""; pid = w.Current.ProcessId; } catch { continue; }
+          string proc = "";
+          try { using (Process p = Process.GetProcessById(pid)) proc = p.ProcessName; } catch { }
+          bool shell = proc.IndexOf("ShellExperienceHost", StringComparison.OrdinalIgnoreCase) >= 0 || proc.IndexOf("ShellHost", StringComparison.OrdinalIgnoreCase) >= 0;
+          if (!shell && name.IndexOf("notification", StringComparison.OrdinalIgnoreCase) < 0 && cls != "Windows.UI.Core.CoreWindow") continue;
+          var texts = new List<string>();
+          try { foreach (AutomationElement e in w.FindAll(TreeScope.Descendants, textCond)) { string t = (e.Current.Name ?? "").Trim(); if (t.Length > 0 && texts.Count < 12) texts.Add(t.Length > 80 ? t.Substring(0, 80) : t); } } catch { }
+          var row = new Dictionary<string, object>();
+          row["name"] = name; row["class"] = cls; row["process"] = proc; row["texts"] = texts;
+          outL.Add(row);
+        }
+      } catch (Exception e) { outL.Add("error: " + e.Message); }
+      return outL;
+    }
+
     static void Scan(List<Dictionary<string, object>> res) {
       AutomationElementCollection wins = AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition);
       var textCond = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text);
@@ -556,9 +579,21 @@ namespace NI {
       d["camNow"] = InUse("webcam");
       d["micSessions"] = Audio.MicDebug();
       d["registry"] = rows;
+      d["toastWindows"] = Toasts.Dump();
+      d["webcamDevices"] = CamDevices();
       d["os"] = Environment.OSVersion.VersionString;
       d["memoryMB"] = Math.Round(Process.GetCurrentProcess().WorkingSet64 / 1048576.0, 1);
       return d;
+    }
+
+    static List<string> CamDevices() {
+      var l = new List<string>();
+      try {
+        using (var q = new ManagementObjectSearcher("SELECT Name, Status FROM Win32_PnPEntity WHERE PNPClass='Camera' OR PNPClass='Image'"))
+        using (ManagementObjectCollection res = q.Get())
+          foreach (ManagementObject o in res) using (o) l.Add(Convert.ToString(o["Name"]) + " (" + Convert.ToString(o["Status"]) + ")");
+      } catch (Exception e) { l.Add("error: " + e.Message); }
+      return l;
     }
 
     public static Dictionary<string, object> Wifi() {
