@@ -331,6 +331,7 @@ function createWindow() {
   win.webContents.on('did-finish-load', () => {
     send('style', settings.style);
     send('calendar', calState);
+    send('notif-source', notifSource);
     sendPrefs();
     if (bridgeInfo) send('bridge-ready', bridgeInfo);
   });
@@ -390,6 +391,7 @@ function buildTrayMenu() {
     {
       label: 'Copy mic/camera diagnostics', click: async () => {
         const r = await callBridge('diag');
+        if (r && r.data && typeof r.data === 'object') r.data.notifications = { source: notifSource, error: notifErr, lastId: lastNotifId };
         clipboard.writeText(JSON.stringify(r, null, 2));
       },
     },
@@ -519,6 +521,68 @@ onTrusted('open-url', (url) => {
 onTrusted('autohide', (hide) => { autoHidden = !!hide; applyVisibility(); });
 onTrusted('quit', () => app.quit());
 
+// ------------------------------------------------------------------ notifications (Windows notification history)
+// Windows keeps every notification in a local database (%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db).
+// Reading it read-only is far more reliable than reading the pop-up off the screen: it works even when
+// banners are off or Do Not Disturb is on, and in any Windows language. Nothing leaves this PC.
+let notifDb = null, notifErr = null, lastNotifId = null, notifSource = 'popup';
+function openNotifDb() {
+  if (process.platform !== 'win32' || notifDb) return;
+  try {
+    const { DatabaseSync } = require('node:sqlite');
+    const file = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'Windows', 'Notifications', 'wpndatabase.db');
+    if (!fs.existsSync(file)) throw new Error('notification database not found');
+    notifDb = new DatabaseSync(file, { readOnly: true });
+    notifSource = 'history';
+    notifErr = null;
+    send('notif-source', notifSource);
+  } catch (e) { notifDb = null; notifErr = String(e.message || e); notifSource = 'popup'; }
+}
+const decodeXml = (t) => t.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+  .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&amp;/g, '&').trim();
+const APP_NAMES = [[/whatsapp/i, 'WhatsApp'], [/teams/i, 'Teams'], [/outlook/i, 'Outlook'], [/chrome/i, 'Chrome'], [/msedge|edge/i, 'Edge'],
+  [/brave/i, 'Brave'], [/firefox/i, 'Firefox'], [/discord/i, 'Discord'], [/telegram/i, 'Telegram'], [/slack/i, 'Slack'], [/zoom/i, 'Zoom'],
+  [/instagram/i, 'Instagram'], [/spotify/i, 'Spotify'], [/mail/i, 'Mail'], [/calendar/i, 'Calendar'], [/defender|security/i, 'Security']];
+function appName(id) {
+  const s = String(id || '');
+  for (const [re, name] of APP_NAMES) if (re.test(s)) return name;
+  let n = s.split('!')[0].replace(/\.exe$/i, '').split('_')[0].split(/[\\.]/).pop() || '';
+  return n ? n.charAt(0).toUpperCase() + n.slice(1) : '';
+}
+function pollNotifs() {
+  if (quitting) return;
+  if (!notifDb) { openNotifDb(); if (!notifDb) return; }
+  try {
+    if (lastNotifId === null) {
+      const r = notifDb.prepare('SELECT MAX(Id) AS m FROM Notification').get();
+      lastNotifId = Number(r && r.m) || 0;          // start from now: don't replay old notifications
+      return;
+    }
+    const rows = notifDb.prepare(
+      'SELECT n.Id AS id, n.Type AS type, n.Payload AS payload, h.PrimaryId AS app ' +
+      'FROM Notification n LEFT JOIN NotificationHandler h ON h.RecordId = n.HandlerId ' +
+      'WHERE n.Id > ? ORDER BY n.Id LIMIT 10').all(lastNotifId);
+    const out = [];
+    for (const row of rows) {
+      lastNotifId = Math.max(lastNotifId, Number(row.id) || 0);
+      if (String(row.type).toLowerCase() !== 'toast' || !row.payload) continue;
+      const xml = Buffer.from(row.payload).toString('utf8');
+      const texts = [...xml.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/gi)]
+        .filter((m) => !/placement\s*=\s*["']attribution/i.test(m[1]))
+        .map((m) => decodeXml(m[2])).filter(Boolean);
+      if (!texts.length) continue;
+      out.push({ app: appName(row.app), title: texts[0].slice(0, 200), body: texts.slice(1).join(' ').slice(0, 300) });
+    }
+    if (out.length) send('notifs', out.slice(-3));
+    notifErr = null;
+  } catch (e) {
+    notifErr = String(e.message || e);
+    if (/not a database|no such table|malformed/i.test(notifErr)) { try { notifDb.close(); } catch {} notifDb = null; notifSource = 'popup'; send('notif-source', notifSource); }
+  }
+}
+const notifTimer = setInterval(pollNotifs, 1200);
+
 // ------------------------------------------------------------------ memory trimming
 // While the island is collapsed and idle, ask Windows to page out memory our processes aren't using.
 // Pages come back instantly when needed; Task Manager's "Memory" column drops a lot.
@@ -560,6 +624,8 @@ app.on('before-quit', () => {
   quitting = true;
   clearInterval(cursorTimer);
   clearInterval(trimTimer);
+  clearInterval(notifTimer);
+  try { if (notifDb) notifDb.close(); } catch {}
   clearTimeout(calTimer);
   globalShortcut.unregisterAll();
   if (bridge) bridge.kill();

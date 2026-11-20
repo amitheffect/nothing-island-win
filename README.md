@@ -59,7 +59,8 @@ npm run dist
 - **Brightness** works on laptop/built-in screens. External monitors show "N/A" (Windows doesn't expose them through WMI).
 - **Wi-Fi name**: on Windows 11 24H2+ the SSID may need *Location services* switched on; otherwise it shows "NOT CONNECTED" even while online. Toggling still works.
 - If Wi-Fi/Bluetooth say "CAN'T TOGGLE", Windows blocked it (e.g. airplane mode or a company policy). Right-click opens Settings instead.
-- **Notifications** are read from Windows' own pop-ups, so keep notification banners turned on for the apps you want to see. Tuned for English Windows. Click a notification to dismiss it; hover to keep it open.
+- **Notifications** are read from Windows' own notification history on your PC (read-only, nothing leaves the PC). They work in any language, even with banners off. If the history can't be read, the app falls back to reading the pop-up on screen. Click a notification to dismiss it; hover to keep it open.
+- **Camera dot** needs a webcam that Windows can see. The diagnostics report lists any it finds under `webcamDevices`.
 - **Fullscreen**: the island hides automatically and comes back when you leave fullscreen. A finished timer still shows.
 
 ## Memory use

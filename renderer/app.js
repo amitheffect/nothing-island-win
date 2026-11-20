@@ -26,6 +26,7 @@
     chargeUntil: 0, chargePlugged: false,
     fullscreen: false, autoHidden: false,
     style: 'island',
+    notifSource: 'popup',
     autoHidePref: true,
     inUse: { mic: [], cam: [] }, privPrimed: false,
     cal: { configured: false, ok: false, error: null, events: [] },
@@ -722,7 +723,8 @@
           S.fullscreen = d.fullscreen;
           updateAutoHide();
         }
-        if (!S.autoHidden) pushNotifs(asList(d.notifs));
+        // pop-up reading is only the fallback when the notification history can't be read
+        if (!S.autoHidden && S.notifSource !== 'history') pushNotifs(asList(d.notifs));
         updatePrivacy(asList(d.micApps), asList(d.camApps));
         const wasPlaying = S.media.active && S.media.playing;
         const prevKey = S.mediaKey;
@@ -1025,6 +1027,8 @@
     if (api.setStyle) api.setStyle(next);
   });
   if (api.onStyle) api.onStyle(applyStyle);
+  if (api.onNotifSource) api.onNotifSource((src) => { S.notifSource = src; });
+  if (api.onNotifs) api.onNotifs((list) => { if (!S.autoHidden && !S.expanded) pushNotifs(asList(list)); });
   function applyPrefs(p) {
     S.autoHidePref = p.autoHide !== false;
     $('autoHideBtn').classList.toggle('on', S.autoHidePref);

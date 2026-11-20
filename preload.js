@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('nothingIsland', {
   onCalendar: (cb) => ipcRenderer.on('calendar', (_e, c) => cb(c)),
   openUrl: (url) => ipcRenderer.send('open-url', url),
   setAutoHidePref: (on) => ipcRenderer.send('set-autohide', !!on),
+  onNotifs: (cb) => ipcRenderer.on('notifs', (_e, list) => cb(list)),
+  onNotifSource: (cb) => ipcRenderer.on('notif-source', (_e, s) => cb(s)),
   onPrefs: (cb) => ipcRenderer.on('prefs', (_e, p) => cb(p)),
   setHitRect: (r) => ipcRenderer.send('hit-rect', r),
   onCursorInside: (cb) => ipcRenderer.on('cursor-inside', (_e, v) => cb(v)),
