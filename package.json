@@ -8,7 +8,8 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable nsis"
+    "dist": "electron-builder --win portable nsis",
+    "postinstall": "node node_modules/electron/install.js"
   },
   "devDependencies": {
     "electron": "^39.2.1",
@@ -17,10 +18,28 @@
   "build": {
     "appId": "in.bizkit.nothingisland",
     "productName": "Nothing Island",
-    "asarUnpack": ["bridge.ps1", "bridge.cs", "devices.cs"],
-    "files": ["main.js", "calendar.js", "preload.js", "bridge.ps1", "bridge.cs", "devices.cs", "renderer/**/*"],
+    "asarUnpack": [
+      "bridge.ps1",
+      "bridge.cs",
+      "devices.cs"
+    ],
+    "files": [
+      "main.js",
+      "calendar.js",
+      "preload.js",
+      "bridge.ps1",
+      "bridge.cs",
+      "devices.cs",
+      "renderer/**/*"
+    ],
     "win": {
-      "target": ["portable", "nsis"]
+      "target": [
+        "portable",
+        "nsis"
+      ]
     }
+  },
+  "allowScripts": {
+    "electron": true
   }
 }
