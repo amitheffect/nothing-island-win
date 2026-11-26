@@ -46,8 +46,15 @@ namespace NI.Dev {
     [PreserveSig] int p6(); [PreserveSig] int p7(); [PreserveSig] int p8(); [PreserveSig] int p9(); [PreserveSig] int p10();
     [PreserveSig] int SetDefaultEndpoint([MarshalAs(UnmanagedType.LPWStr)] string id, int role);
   }
-  [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMEnumeratorCo { }
-  [ComImport, Guid("870af99c-171d-4f9e-af0d-e63df40c2bc9")] class PolicyConfigCo { }
+  // No [ComImport] classes here on purpose. MMDeviceEnumerator is a process-wide singleton and the main
+  // engine already wraps it in its own class; "new"-ing a second wrapper class for the same object fails
+  // with "Unable to cast NI.MMDeviceEnumeratorComObject to ...". Creating it by CLSID and casting to the
+  // interface (a QueryInterface) works whatever wrapper .NET reuses.
+  static class Com {
+    public static object Create(string clsid) { return Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid(clsid), true)); }
+    public static IMMDeviceEnumeratorX Enumerator() { return (IMMDeviceEnumeratorX)Create("BCDE0395-E52F-467C-8E3D-C4579291692E"); }
+    public static IPolicyConfigX PolicyConfig() { return (IPolicyConfigX)Create("870af99c-171d-4f9e-af0d-e63df40c2bc9"); }
+  }
 
   public static class Outputs {
     [DllImport("ole32.dll")] static extern int PropVariantClear(ref PropVar v);
@@ -65,7 +72,7 @@ namespace NI.Dev {
 
     // Active speakers / headphones. flow 0 = render.
     public static Dictionary<string, object> List() {
-      var en = new MMEnumeratorCo() as IMMDeviceEnumeratorX;
+      var en = Com.Enumerator();
       string def = null;
       IMMDeviceX dd;
       if (en.GetDefaultAudioEndpoint(0, 1, out dd) == 0 && dd != null) dd.GetId(out def);
@@ -96,8 +103,8 @@ namespace NI.Dev {
       bool found = false;
       foreach (object o in (List<object>)List()["devices"]) if ((string)((Dictionary<string, object>)o)["id"] == id) found = true;
       if (!found) throw new ArgumentException("That output is no longer available");
-      var pc = new PolicyConfigCo() as IPolicyConfigX;
-      if (pc == null) throw new NotSupportedException("Windows did not allow switching the output");
+      IPolicyConfigX pc;
+      try { pc = Com.PolicyConfig(); } catch (InvalidCastException) { throw new NotSupportedException("Windows did not allow switching the output"); }
       for (int role = 0; role < 3; role++) Marshal.ThrowExceptionForHR(pc.SetDefaultEndpoint(id, role));
     }
   }

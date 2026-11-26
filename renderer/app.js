@@ -576,19 +576,70 @@
     T.remaining = T.total;
     renderTimer();
   });
+  // up to 23 h 59 min. Scrolling speeds up with the length (Shift = always 1 min), and a
+  // double-click on the digits lets you type a time: 90 · 45m · 1h30 · 2h · 25:00 · 2:15:00
+  const TIMER_MAX = 23 * 3600 + 59 * 60;
+  function timerStep(sec, up, fine) {
+    const m = Math.round(sec / 60);
+    const step = fine ? 1 : (up ? m >= 180 : m > 180) ? 15 : (up ? m >= 60 : m > 60) ? 5 : 1;
+    const next = up ? Math.floor(m / step) * step + step : Math.ceil(m / step) * step - step;
+    return clamp(next * 60, 60, TIMER_MAX);
+  }
+  function setTimer(sec) {
+    T.running = false;
+    T.total = clamp(Math.round(sec), 60, TIMER_MAX);
+    T.remaining = T.total;
+    renderTimer();
+  }
+  $('timerTime').title = 'Scroll to change · double-click to type a time (e.g. 90, 1h30, 25:00, 2:15:00)';
   $('timerTime').addEventListener('wheel', (e) => {
     if (T.running) return;
     e.preventDefault();
     e.stopPropagation();
-    T.total = clamp(Math.round(T.total / 60) * 60 + (e.deltaY < 0 ? 60 : -60), 60, 180 * 60);
-    T.remaining = T.total;
-    renderTimer();
+    setTimer(timerStep(T.total, e.deltaY < 0, e.shiftKey));
   }, { passive: false });
+  function parseTimer(txt) {
+    const s = String(txt).trim().toLowerCase().replace(/\s+/g, '');
+    if (!s) return null;
+    let m;
+    if ((m = s.match(/^(\d{1,2}):(\d{1,2}):(\d{1,2})$/))) return (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]);
+    if ((m = s.match(/^(\d{1,3}):(\d{1,2})$/))) return (+m[1]) * 60 + (+m[2]);                 // mm:ss, like the display
+    if ((m = s.match(/^(?:(\d{1,2})h)?(?:(\d{1,4})m?)?$/)) && (m[1] || m[2])) return (+(m[1] || 0)) * 3600 + (+(m[2] || 0)) * 60;
+    return null;
+  }
+  $('timerTime').addEventListener('dblclick', () => {
+    if (T.running || $('timerTime').querySelector('input')) return;
+    const box = $('timerTime');
+    const inp = document.createElement('input');
+    inp.className = 't-input'; inp.maxLength = 8; inp.spellcheck = false;
+    inp.placeholder = '1h30'; inp.value = '';
+    box.innerHTML = ''; box.appendChild(inp);
+    syncInteractive(true);
+    inp.focus();
+    let done = false;
+    const finish = (apply) => {
+      if (done) return; done = true;
+      const sec = apply ? parseTimer(inp.value) : null;
+      box.innerHTML = '';                       // drop the field before the digits are drawn again
+      if (sec != null && sec > 0) setTimer(sec); else renderTimer();
+    };
+    inp.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') finish(true);
+      if (e.key === 'Escape') finish(false);
+    });
+    inp.addEventListener('blur', () => finish(true));
+  });
 
   function renderTimer() {
     const tile = document.querySelector('.timer');
     tile.classList.toggle('running', T.running);
-    $('timerTime').innerHTML = DM.text(fmtTimer(T.remaining), { dot: 3.1, gap: 1.4, color: 'currentColor', ghost: 0.08 });
+    if (!$('timerTime').querySelector('input')) {
+      const txt = fmtTimer(T.remaining);
+      // H:MM:SS is wider than MM:SS: shrink the dots so it still fits beside the play button
+      const dots = txt.length > 5 ? { dot: 2.3, gap: 1.05 } : { dot: 3.1, gap: 1.4 };
+      $('timerTime').innerHTML = DM.text(txt, { ...dots, color: 'currentColor', ghost: 0.08 });
+    }
     $('goIco').setAttribute('href', T.running ? '#i-pause' : '#i-play');
     $('timerLabel').textContent = T.running ? 'RUNNING' : T.remaining < T.total ? 'PAUSED' : 'TIMER';
     document.querySelectorAll('#chips button').forEach((b) =>

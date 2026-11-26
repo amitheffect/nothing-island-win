@@ -617,3 +617,10 @@ body.notch #panel { padding-top: 18px; }
 .battery .label { width: auto; font-size: 8px; }
 .bat-dots { gap: 4px; }
 .bat-dots b { width: 7px; height: 7px; }
+
+/* typed timer entry (double-click the digits) */
+.t-input {
+  width: 128px; height: 30px; border-radius: 15px; border: 1.5px solid #111; background: #fff; color: #111;
+  padding: 0 12px; font-family: var(--mono); font-size: 15px; letter-spacing: .06em; outline: none;
+}
+.t-input::placeholder { color: #b0b0b4; }

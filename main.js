@@ -377,7 +377,24 @@ function placeWindow() {
   win.setBounds({ x, y, width: WIN_W, height: WIN_H });
 }
 
+// Keyboard shortcuts that must never reach the island. Electron's default menu would otherwise
+// still answer Ctrl+W (close → app quits), Ctrl+R / F5 (reload), Ctrl+Shift+I (DevTools) and the
+// zoom keys, even though the window has no menu bar. Editing keys (Ctrl+A/C/V/X/Z/Y) still work
+// so the Wi-Fi password and calendar fields behave normally.
+function blockedShortcut(input) {
+  if (input.type !== 'keyDown') return false;
+  const k = String(input.key || '').toLowerCase();
+  const ctrl = input.control || input.meta;
+  if (['f5', 'f11', 'f12', 'browserrefresh', 'browserback', 'browserforward'].includes(k)) return true;
+  if (input.alt && k === 'f4') return true;
+  if (input.alt && (k === 'arrowleft' || k === 'arrowright')) return true;   // history navigation
+  if (ctrl && ['r', 'w', 'p', 'n', 't', 'o', 's', 'u', 'j', 'f4', '=', '+', '-', '_', '0', 'add', 'subtract'].includes(k)) return true;
+  if (ctrl && input.shift && ['i', 'j', 'c', 'r', 'delete'].includes(k)) return true;
+  return false;
+}
+
 function createWindow() {
+  Menu.setApplicationMenu(null);   // no hidden default menu = no built-in accelerators
   win = new BrowserWindow({
     width: WIN_W,
     height: WIN_H,
@@ -412,6 +429,10 @@ function createWindow() {
   win.webContents.on('will-redirect', (e) => e.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-attach-webview', (e) => e.preventDefault());
+  win.webContents.on('before-input-event', (e, input) => { if (blockedShortcut(input)) e.preventDefault(); });
+  // no zooming (Ctrl+wheel / pinch) — the layout is pixel-exact
+  win.webContents.on('zoom-changed', () => { try { win.webContents.setZoomLevel(0); } catch {} });
+  win.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.once('ready-to-show', () => win.showInactive());
   win.webContents.on('did-finish-load', () => {
@@ -422,6 +443,11 @@ function createWindow() {
     if (bridgeInfo) send('bridge-ready', bridgeInfo);
   });
   win.on('blur', () => send('blur'));
+  // only Quit (tray menu) ends the app; Alt+F4 or anything else that tries to close the window is ignored
+  win.on('close', (e) => { if (!quitting) { e.preventDefault(); send('blur'); } });
+  // ...but never hold up Windows signing out or shutting down
+  win.on('query-session-end', () => { quitting = true; });
+  win.on('session-end', () => { quitting = true; });
   win.on('closed', () => { win = null; });
 }
 
