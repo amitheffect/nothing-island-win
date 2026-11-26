@@ -26,12 +26,14 @@ function Api([string]$method, [string]$path, $payload) {
   $tmp = [IO.Path]::GetTempFileName()
   try {
     [IO.File]::WriteAllText($tmp, $json, $utf8)
+    $ErrorActionPreference = 'Continue'   # gh prints progress to stderr; 5.1 would treat that as a failure
     $out = & gh api -X $method "repos/$Repo/$path" --input $tmp 2>&1
     if ($LASTEXITCODE -ne 0) { throw "gh api $method $path failed: $out" }
     return ($out -join "`n") | ConvertFrom-Json
   } finally { Remove-Item $tmp -ErrorAction SilentlyContinue }
 }
 function ApiGet([string]$path) {
+  $ErrorActionPreference = 'Continue'
   $out = & gh api "repos/$Repo/$path" 2>&1
   if ($LASTEXITCODE -ne 0) { throw "gh api GET $path failed: $out" }
   return ($out -join "`n") | ConvertFrom-Json
