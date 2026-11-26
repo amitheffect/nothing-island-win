@@ -14,7 +14,19 @@ gh auth status 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Not signed in. Run: gh auth login' }
 
 $drafts = Join-Path $PSScriptRoot '..\.github\issue-drafts'
+# Windows PowerShell 5.1 (and pwsh before 7.3) pass arguments to programs without escaping
+# double quotes, so a title like 'Fails: "Unable to cast"' gets split into pieces. Escape them
+# the way Windows programs expect: \" and doubled backslashes in front of a quote.
+$v = $PSVersionTable.PSVersion
+$legacyArgs = ($v.Major -lt 7) -or ($v.Major -eq 7 -and $v.Minor -lt 3) -or ($PSNativeCommandArgumentPassing -eq 'Legacy')
+function Quote([string]$s) {
+  if (-not $legacyArgs -or $s -notmatch '"') { return $s }
+  $e = [regex]::Replace($s, '(\\*)"', { param($m) ($m.Groups[1].Value * 2) + '\"' })
+  if ($e -match '\s' -and $e -match '\\+$') { $e = [regex]::Replace($e, '\\+$', { param($m) $m.Value * 2 }) }
+  return $e
+}
 function Run([string[]]$a) {
+  $a = @($a | ForEach-Object { Quote $_ })
   if ($DryRun) { Write-Host "gh $($a -join ' ')"; return '' }
   $out = & gh @a 2>&1
   if ($LASTEXITCODE -ne 0) { throw "gh $($a[0..1] -join ' ') failed: $out" }
