@@ -57,10 +57,10 @@ $items = foreach ($f in Get-ChildItem $drafts -Filter '*.md' | Sort-Object Name)
 foreach ($it in $items) {
   if ($existing.ContainsKey($it.Title)) { $it.Number = $existing[$it.Title]; Write-Host "exists  #$($it.Number)  $($it.Title)"; continue }
   $tmp = New-TemporaryFile
-  Set-Content $tmp $it.Body -Encoding UTF8
-  $args = @('issue', 'create', '-R', $Repo, '--title', $it.Title, '--body-file', $tmp.FullName, '--milestone', $it.Milestone)
-  foreach ($l in ($it.Labels -split ',')) { if ($l.Trim()) { $args += @('--label', $l.Trim()) } }
-  $url = Run $args
+  [IO.File]::WriteAllText($tmp.FullName, $it.Body, (New-Object Text.UTF8Encoding $false))
+  $ghArgs = @('issue', 'create', '-R', $Repo, '--title', $it.Title, '--body-file', $tmp.FullName, '--milestone', $it.Milestone)
+  foreach ($l in ($it.Labels -split ',')) { if ($l.Trim()) { $ghArgs += @('--label', $l.Trim()) } }
+  $url = (Run $ghArgs) -join "`n"
   Remove-Item $tmp
   if ($url -match '/issues/(\d+)') { $it.Number = [int]$Matches[1] }
   $it.New = $true
@@ -73,7 +73,7 @@ foreach ($it in $items | Where-Object { $_.New -and $_.Body -match '#\[\d\d\]' }
     $t = $items | Where-Object { $_.Key -eq $m.Groups[1].Value } | Select-Object -First 1
     if ($t -and $t.Number) { "#$($t.Number)" } else { $m.Value } })
   $tmp = New-TemporaryFile
-  Set-Content $tmp $body -Encoding UTF8
+  [IO.File]::WriteAllText($tmp.FullName, $body, (New-Object Text.UTF8Encoding $false))
   Run @('issue', 'edit', "$($it.Number)", '-R', $Repo, '--body-file', $tmp.FullName) | Out-Null
   Remove-Item $tmp
 }
