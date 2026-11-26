@@ -1,0 +1,14 @@
+name: Feature idea
+description: Suggest something for Nothing Island
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe the feature and why it'd help. Mock-ups or references welcome.
+    validations: { required: true }
+  - type: textarea
+    id: alt
+    attributes:
+      label: Anything you use today instead?

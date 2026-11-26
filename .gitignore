@@ -8,3 +8,4 @@ lite/build.log
 # local settings / secrets
 settings.json
 .env
+brag-output*/

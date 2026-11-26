@@ -1,0 +1,33 @@
+name: Bug report
+description: Something in Nothing Island doesn't work
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what you saw. Screenshots help a lot.
+    validations: { required: true }
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options: [Pill / peeks, Music, Timer, Wi-Fi, Bluetooth, Sound / volume, Brightness, Calendar, Notifications, Mic / camera dot, Screen time, Settings, Install / start-up, Other]
+    validations: { required: true }
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2 (Settings → System → About)"
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Nothing Island version / commit
+      placeholder: "v1.1.0 or the commit hash"
+  - type: textarea
+    id: diag
+    attributes:
+      label: Diagnostics (optional)
+      description: Tray icon → "Copy mic/camera diagnostics", paste here. Remove anything you don't want public.
+      render: json
